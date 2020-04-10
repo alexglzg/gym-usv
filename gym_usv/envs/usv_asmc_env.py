@@ -64,8 +64,23 @@ class UsvAsmcEnv(gym.Env):
         self.min_action = -np.pi
         self.max_action = np.pi
 
+        self.min_u = -1.5
+        self.max_u = 1.5
+        self.min_vr = -0.5
+        self.max_vr = 0.5
+        self.min_ye = -10
+        self.max_ye = 10
+        self.min_ak_psi = -np.pi
+        self.max_ak_psi = np.pi
+
+        self.low_state = np.array([self.min_u, self.min_vr, self.min_vr, self.min_ye, self.min_ak_psi], dtype=np.float32)
+        self.high_state = np.array([self.max_u, self.max_vr, self.max_vr, self.max_ye, self.max_ak_psi], dtype=np.float32)
+
         self.action_space = spaces.Box(low=self.min_action, high=self.max_action,
                                        shape=(1,), dtype=np.float32)
+
+        self.observation_space = spaces.Box(low=self.low_state, high=self.high_state,
+                                            dtype=np.float32)
 
 
     def step(self, action):
