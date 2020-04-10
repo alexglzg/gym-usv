@@ -61,6 +61,12 @@ class UsvAsmcEnv(gym.Env):
 
         self.viewer = None
 
+        self.min_action = -np.pi
+        self.max_action = np.pi
+
+        self.action_space = spaces.Box(low=self.min_action, high=self.max_action,
+                                       shape=(1,), dtype=np.float32)
+
 
     def step(self, action):
         state = self.state
