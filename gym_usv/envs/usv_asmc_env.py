@@ -66,7 +66,7 @@ class UsvAsmcEnv(gym.Env):
         state = self.state
         position = self.position
         aux_vars = self.aux_vars
-        last = self.aux_vars
+        last = self.last
         target = self.target
 
 
@@ -145,7 +145,7 @@ class UsvAsmcEnv(gym.Env):
         Tstbd = np.where(np.greater(Tstbd, 36.5), 36.5, Tstbd)
         Tstbd = np.where(np.less(Tstbd, -30), -30, Tstbd)
 
-         M = np.array([[self.m - self.X_u_dot, 0, 0],
+        M = np.array([[self.m - self.X_u_dot, 0, 0],
                       [0, self.m - self.Y_v_dot, 0 - self.Y_r_dot],
                       [0, 0 - self.N_v_dot, self.Iz - self.N_r_dot]])
 
@@ -194,9 +194,9 @@ class UsvAsmcEnv(gym.Env):
 
         ye = -(eta[0] - x_0)*np.math.sin(ak) + (eta[1] - y_0)*np.math.cos(ak)
 
-        reward = compute_reward(ye, ak_psi)
+        reward = self.compute_reward(ye, ak_psi)
 
-        self.state = (upsilon[0], upislon[1], upsilon[2], ye, ak_psi)
+        self.state = (upsilon[0], upsilon[1], upsilon[2], ye, ak_psi)
         self.position = (eta[0], eta[1], psi)
         self.aux_vars = (e_u_int, Ka_u, Ka_psi)
         self.last = (eta_dot_last[0], eta_dot_last[1], eta_dot_last[2], upsilon_dot_last[0], upsilon_dot_last[1], upsilon_dot_last[2], e_u_last, Ka_dot_u_last, Ka_dot_psi_last)
@@ -206,9 +206,9 @@ class UsvAsmcEnv(gym.Env):
 
     def reset(self):
 
-        x = np_random.uniform(low=-2.5, high=2.5)
-        y = np_random.uniform(low=-2.5, high=2.5)
-        psi = np_random.uniform(low=-np.pi, high=np.pi)
+        x = np.random.uniform(low=-2.5, high=2.5)
+        y = np.random.uniform(low=-2.5, high=2.5)
+        psi = np.random.uniform(low=-np.pi, high=np.pi)
         eta = np.array([x, y])
         upsilon = np.array([0.,0.,0.])
         eta_dot_last = np.array([0.,0.,0.])
@@ -220,11 +220,11 @@ class UsvAsmcEnv(gym.Env):
         Ka_dot_u_last = 0.
         Ka_dot_psi_last = 0.
 
-        x_0 = np_random.uniform(low=-2.5, high=2.5)
-        y_0 = np_random.uniform(low=-2.5, high=2.5)
-        x_d = np_random.uniform(low=15, high=30)
-        y_d = np_random.uniform(low=-2.5, high=2.5)
-        desired_speed = 
+        x_0 = np.random.uniform(low=-2.5, high=2.5)
+        y_0 = np.random.uniform(low=-2.5, high=2.5)
+        x_d = np.random.uniform(low=15, high=30)
+        y_d = np.random.uniform(low=-2.5, high=2.5)
+        desired_speed = np.random.uniform(low=0.4, high=1.4)
 
         ak = np.math.atan2(y_d-y_0,x_d-x_0)
         ak = np.float32(ak)
@@ -234,11 +234,11 @@ class UsvAsmcEnv(gym.Env):
         ak_psi = np.float32(ak_psi)
         ye = -(x - x_0)*np.math.sin(ak) + (y - y_0)*np.math.cos(ak)
 
-        self.state = (upsilon[0], upislon[1], upsilon[2], ye, ak_psi)
-        self.position = np.array(eta[0], eta[1], psi)
-        self.aux_vars = (ak, e_u_int, Ka_u, Ka_psi)
+        self.state = (upsilon[0], upsilon[1], upsilon[2], ye, ak_psi)
+        self.position = np.array([eta[0], eta[1], psi])
+        self.aux_vars = (e_u_int, Ka_u, Ka_psi)
         self.last = (eta_dot_last[0], eta_dot_last[1], eta_dot_last[2], upsilon_dot_last[0], upsilon_dot_last[1], upsilon_dot_last[2], e_u_last, Ka_dot_u_last, Ka_dot_psi_last)
-        self.target = np.array(x_0, y_0, desired_speed, ak, x_d, y_d)
+        self.target = np.array([x_0, y_0, desired_speed, ak, x_d, y_d])
 
         return np.array(self.state)
 
@@ -246,19 +246,18 @@ class UsvAsmcEnv(gym.Env):
     def render(self, mode='human'):
 
         screen_width = 400
-        scree_height = 800
+        screen_height = 800
 
         world_width = self.max_y - self.min_y
         scale = screen_width/world_width
         boat_width = 15
         boat_height = 20
 
-        clearance = 10
-
         if self.viewer is None:
             from gym.envs.classic_control import rendering
             self.viewer = rendering.Viewer(screen_width, screen_height)
 
+            clearance = 10
             l, r, t, b = -boat_width/2, boat_width/2, boat_height, 0
             boat = rendering.FilledPolygon([(l,b), (l,t), (r,t), (r,b)])
             boat.add_attr(rendering.Transform(translation=(0, clearance)))
@@ -266,12 +265,23 @@ class UsvAsmcEnv(gym.Env):
             boat.add_attr(self.boat_trans)
             self.viewer.add_geom(boat)
 
+        x_0 = (self.target[0] - self.min_x)*scale
+        y_0 = (self.target[1] - self.min_y)*scale
+        x_d = (self.target[4] - self.min_x)*scale
+        y_d = (self.target[5] - self.min_y)*scale
+        start = (y_0, x_0)
+        end = (y_d, x_d)
+
+        self.viewer.draw_line(start, end)
+
         x = self.position[0]
         y = self.position[1]
         psi = self.position[2]
 
         self.boat_trans.set_translation((y-self.min_y)*scale, (x-self.min_x)*scale)
-        self.boat_trans.set_rotation(psi)
+        self.boat_trans.set_rotation(-psi)
+
+        self.viewer.draw_line(start, end)
 
         return self.viewer.render(return_rgb_array = mode == 'rgb_array')
 
