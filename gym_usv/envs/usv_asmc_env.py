@@ -61,8 +61,8 @@ class UsvAsmcEnv(gym.Env):
 
         self.viewer = None
 
-        self.min_action = -np.pi
-        self.max_action = np.pi
+        self.min_action = -np.pi/2
+        self.max_action = np.pi/2
 
         self.min_u = -1.5
         self.max_u = 1.5
@@ -152,8 +152,8 @@ class UsvAsmcEnv(gym.Env):
         Ka_psi = self.integral_step*(Ka_dot_psi + Ka_dot_psi_last)/2 + Ka_psi
         Ka_dot_psi_last = Ka_dot_psi
 
-        ua_u = (-Ka_u * np.sqrt(np.abs(sigma_u)) * np.sign(sigma_u)) - (self.k2_u * sigma_u)
-        ua_psi = (-Ka_psi * np.sqrt(np.abs(sigma_psi)) * np.sign(sigma_psi)) - (self.k2_psi * sigma_psi)
+        ua_u = (-Ka_u * np.power(np.abs(sigma_u), 0.5) * np.sign(sigma_u)) - (self.k2_u * sigma_u)
+        ua_psi = (-Ka_psi * np.power(np.abs(sigma_psi), 0.5) * np.sign(sigma_psi)) - (self.k2_psi * sigma_psi)
 
         Tx = ((self.lambda_u * e_u) - f_u - ua_u) / g_u
         Tz = ((self.lambda_psi * e_psi) - f_psi - ua_psi) / g_psi
@@ -217,12 +217,12 @@ class UsvAsmcEnv(gym.Env):
 
         reward = self.compute_reward(ye, ak_psi)
 
-        self.state = (upsilon[0], upsilon[1], upsilon[2], ye, ak_psi)
-        self.position = (eta[0], eta[1], psi)
-        self.aux_vars = (e_u_int, Ka_u, Ka_psi)
-        self.last = (eta_dot_last[0], eta_dot_last[1], eta_dot_last[2], upsilon_dot_last[0], upsilon_dot_last[1], upsilon_dot_last[2], e_u_last, Ka_dot_u_last, Ka_dot_psi_last)
+        self.state = np.array([upsilon[0], upsilon[1], upsilon[2], ye, ak_psi])
+        self.position = np.array([eta[0], eta[1], psi])
+        self.aux_vars = np.array([e_u_int, Ka_u, Ka_psi])
+        self.last = np.array([eta_dot_last[0], eta_dot_last[1], eta_dot_last[2], upsilon_dot_last[0], upsilon_dot_last[1], upsilon_dot_last[2], e_u_last, Ka_dot_u_last, Ka_dot_psi_last])
 
-        return np.array(self.state), reward, False, {}
+        return self.state, reward, False, {}
 
 
     def reset(self):
@@ -255,13 +255,13 @@ class UsvAsmcEnv(gym.Env):
         ak_psi = np.float32(ak_psi)
         ye = -(x - x_0)*np.math.sin(ak) + (y - y_0)*np.math.cos(ak)
 
-        self.state = (upsilon[0], upsilon[1], upsilon[2], ye, ak_psi)
+        self.state = np.array([upsilon[0], upsilon[1], upsilon[2], ye, ak_psi])
         self.position = np.array([eta[0], eta[1], psi])
-        self.aux_vars = (e_u_int, Ka_u, Ka_psi)
-        self.last = (eta_dot_last[0], eta_dot_last[1], eta_dot_last[2], upsilon_dot_last[0], upsilon_dot_last[1], upsilon_dot_last[2], e_u_last, Ka_dot_u_last, Ka_dot_psi_last)
+        self.aux_vars = np.array([e_u_int, Ka_u, Ka_psi])
+        self.last = np.array([eta_dot_last[0], eta_dot_last[1], eta_dot_last[2], upsilon_dot_last[0], upsilon_dot_last[1], upsilon_dot_last[2], e_u_last, Ka_dot_u_last, Ka_dot_psi_last])
         self.target = np.array([x_0, y_0, desired_speed, ak, x_d, y_d])
 
-        return np.array(self.state)
+        return self.state
 
 
     def render(self, mode='human'):
