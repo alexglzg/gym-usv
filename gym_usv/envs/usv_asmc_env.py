@@ -316,10 +316,12 @@ class UsvAsmcEnv(gym.Env):
 
     def compute_reward(self, ye, ak_psi):
         k_ye = 0.3
+        k_ak = 5.72
 
         ye = np.abs(ye)
         ak_psi = np.abs(ak_psi)
 
         reward_ye = np.exp(-k_ye*ye)
-        reward = np.where(np.less(ak_psi, np.pi/2), reward_ye, 0)
+        reward_ak = -np.exp(k_ak*(ak_psi - np.pi))
+        reward = np.where(np.less(ak_psi, np.pi/2), reward_ye, reward_ak)
         return reward
