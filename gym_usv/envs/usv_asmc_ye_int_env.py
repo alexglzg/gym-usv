@@ -11,7 +11,7 @@ from gym import error, spaces, utils
 from gym.utils import seeding
 import numpy as np
 
-class UsvAsmcEnv(gym.Env):
+class UsvAsmcYeIntEnv(gym.Env):
     metadata = {'render.modes': ['human']}
 
     def __init__(self):
@@ -48,6 +48,8 @@ class UsvAsmcEnv(gym.Env):
         self.lambda_u = 0.001
         self.lambda_psi = 1
 
+        self.sigma_ye = 0.05
+
         self.state = None
         self.velocity = None
         self.position = None
@@ -65,7 +67,7 @@ class UsvAsmcEnv(gym.Env):
         self.min_action = -np.pi/2
         self.max_action = np.pi/2
 
-        self.c_action = 1. / np.power((self.max_action/2-self.min_action/2)/self.integral_step, 2)
+        self.c_action = 1. / np.power((self.max_action-self.min_action)/self.integral_step, 2)
         self.w_action = 0.2
 
         self.min_uv = -1.5
@@ -99,8 +101,8 @@ class UsvAsmcEnv(gym.Env):
         u, v_ak, r_ak, ye, psi_ak, action_last = state
         u, v, r = velocity
         x, y, psi = position
-        e_u_int, Ka_u, Ka_psi = aux_vars
-        x_dot_last, y_dot_last, psi_dot_last, u_dot_last, v_dot_last, r_dot_last, e_u_last, Ka_dot_u_last, Ka_dot_psi_last = last
+        e_u_int, Ka_u, Ka_psi, ye_int = aux_vars
+        x_dot_last, y_dot_last, psi_dot_last, u_dot_last, v_dot_last, r_dot_last, e_u_last, Ka_dot_u_last, Ka_dot_psi_last, ye_last = last
         x_0, y_0, desired_speed, ak, x_d, y_d = target
 
         eta = np.array([x, y, psi])
@@ -225,6 +227,13 @@ class UsvAsmcEnv(gym.Env):
         ye = -(eta[0] - x_0)*np.math.sin(ak) + (eta[1] - y_0)*np.math.cos(ak)
         ye_abs = np.abs(ye)
 
+        if np.sign(ye) != np.sign(ye_last):
+            ye_int = 0
+        ye_int = self.integral_step*(ye + ye_last) + ye_int
+        ye_last = ye
+
+        ye_ss = ye + self.sigma_ye*ye_int
+
         reward = self.compute_reward(ye_abs, psi_ak, action_dot)
 
         u_ak, v_ak = self.body_to_path(upsilon[0], upsilon[1], psi_ak)
@@ -235,11 +244,11 @@ class UsvAsmcEnv(gym.Env):
         else:
             done = False
 
-        self.state = np.array([upsilon[0], v_ak, upsilon[2], ye, psi_ak, action_last])
+        self.state = np.array([upsilon[0], v_ak, upsilon[2], ye_ss, psi_ak, action_last])
         self.velocity = np.array([upsilon[0], upsilon[1], upsilon[2]])
         self.position = np.array([eta[0], eta[1], psi])
-        self.aux_vars = np.array([e_u_int, Ka_u, Ka_psi])
-        self.last = np.array([eta_dot_last[0], eta_dot_last[1], eta_dot_last[2], upsilon_dot_last[0], upsilon_dot_last[1], upsilon_dot_last[2], e_u_last, Ka_dot_u_last, Ka_dot_psi_last])
+        self.aux_vars = np.array([e_u_int, Ka_u, Ka_psi, ye_int])
+        self.last = np.array([eta_dot_last[0], eta_dot_last[1], eta_dot_last[2], upsilon_dot_last[0], upsilon_dot_last[1], upsilon_dot_last[2], e_u_last, Ka_dot_u_last, Ka_dot_psi_last, ye_last])
 
         return self.state, reward, done, {}
 
@@ -256,10 +265,12 @@ class UsvAsmcEnv(gym.Env):
         e_u_int = 0.
         Ka_u = 0.
         Ka_psi = 0.
+        ye_int = 0.
         e_u_last = 0.
         Ka_dot_u_last = 0.
         Ka_dot_psi_last = 0.
         action_last = 0.
+        ye_last = 0.
 
         x_0 = np.random.uniform(low=-2.5, high=2.5)
         y_0 = np.random.uniform(low=-2.5, high=2.5)
@@ -280,8 +291,8 @@ class UsvAsmcEnv(gym.Env):
         self.state = np.array([upsilon[0], v_ak, upsilon[2], ye, psi_ak, action_last])
         self.velocity = np.array([upsilon[0], upsilon[1], upsilon[2]])
         self.position = np.array([eta[0], eta[1], psi])
-        self.aux_vars = np.array([e_u_int, Ka_u, Ka_psi])
-        self.last = np.array([eta_dot_last[0], eta_dot_last[1], eta_dot_last[2], upsilon_dot_last[0], upsilon_dot_last[1], upsilon_dot_last[2], e_u_last, Ka_dot_u_last, Ka_dot_psi_last])
+        self.aux_vars = np.array([e_u_int, Ka_u, Ka_psi, ye_int])
+        self.last = np.array([eta_dot_last[0], eta_dot_last[1], eta_dot_last[2], upsilon_dot_last[0], upsilon_dot_last[1], upsilon_dot_last[2], e_u_last, Ka_dot_u_last, Ka_dot_psi_last, ye_last])
         self.target = np.array([x_0, y_0, desired_speed, ak, x_d, y_d])
 
         return self.state
@@ -344,7 +355,7 @@ class UsvAsmcEnv(gym.Env):
 
         reward_ye = np.exp(-k_ye*ye)
         reward_ak = -np.exp(k_ak*(psi_ak - np.pi))
-        reward_action = self.w_action*np.math.tanh(-self.c_action*np.power(action_dot, 2))
+        reward_action = -self.w_action*self.c_action*np.power(action_dot, 2)
         reward = reward_action + np.where(np.less(psi_ak, np.pi/2), reward_ye, reward_ak)
         return reward
 
