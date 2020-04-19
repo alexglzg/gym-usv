@@ -48,7 +48,7 @@ class UsvAsmcYeIntEnv(gym.Env):
         self.lambda_u = 0.001
         self.lambda_psi = 1
 
-        self.sigma_ye = 0.05
+        self.k_i = 0.001
 
         self.state = None
         self.velocity = None
@@ -67,7 +67,7 @@ class UsvAsmcYeIntEnv(gym.Env):
         self.min_action = -np.pi/2
         self.max_action = np.pi/2
 
-        self.c_action = 1. / np.power((self.max_action-self.min_action)/self.integral_step, 2)
+        self.c_action = 1. / np.power((self.max_action/2-self.min_action/2)/self.integral_step, 2)
         self.w_action = 0.2
 
         self.min_uv = -1.5
@@ -232,7 +232,7 @@ class UsvAsmcYeIntEnv(gym.Env):
         ye_int = self.integral_step*(ye + ye_last) + ye_int
         ye_last = ye
 
-        ye_ss = ye + self.sigma_ye*ye_int
+        ye_ss = ye + self.k_i*ye_int
 
         reward = self.compute_reward(ye_abs, psi_ak, action_dot)
 
@@ -255,8 +255,8 @@ class UsvAsmcYeIntEnv(gym.Env):
 
     def reset(self):
 
-        x = np.random.uniform(low=-2.5, high=2.5)
-        y = np.random.uniform(low=-2.5, high=2.5)
+        x = np.random.uniform(low=-5, high=5)
+        y = np.random.uniform(low=-5, high=5)
         psi = np.random.uniform(low=-np.pi, high=np.pi)
         eta = np.array([x, y])
         upsilon = np.array([0.,0.,0.])
@@ -355,7 +355,7 @@ class UsvAsmcYeIntEnv(gym.Env):
 
         reward_ye = np.exp(-k_ye*ye)
         reward_ak = -np.exp(k_ak*(psi_ak - np.pi))
-        reward_action = -self.w_action*self.c_action*np.power(action_dot, 2)
+        reward_action = self.w_action*np.math.tanh(-self.c_action*np.power(action_dot, 2))
         reward = reward_action + np.where(np.less(psi_ak, np.pi/2), reward_ye, reward_ak)
         return reward
 

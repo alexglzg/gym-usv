@@ -48,6 +48,10 @@ class UsvAsmcEnv(gym.Env):
         self.lambda_u = 0.001
         self.lambda_psi = 1
 
+        self.k_ak = 5.72
+        self.k_ye = 0.5
+        self.sigma_ye = 1.
+
         self.state = None
         self.velocity = None
         self.position = None
@@ -241,7 +245,9 @@ class UsvAsmcEnv(gym.Env):
         self.aux_vars = np.array([e_u_int, Ka_u, Ka_psi])
         self.last = np.array([eta_dot_last[0], eta_dot_last[1], eta_dot_last[2], upsilon_dot_last[0], upsilon_dot_last[1], upsilon_dot_last[2], e_u_last, Ka_dot_u_last, Ka_dot_psi_last])
 
-        return self.state, reward, done, {}
+        state = self.state.reshape(self.observation_space.shape[0])
+
+        return state, reward, done, {}
 
 
     def reset(self):
@@ -284,7 +290,9 @@ class UsvAsmcEnv(gym.Env):
         self.last = np.array([eta_dot_last[0], eta_dot_last[1], eta_dot_last[2], upsilon_dot_last[0], upsilon_dot_last[1], upsilon_dot_last[2], e_u_last, Ka_dot_u_last, Ka_dot_psi_last])
         self.target = np.array([x_0, y_0, desired_speed, ak, x_d, y_d])
 
-        return self.state
+        state = self.state.reshape(self.observation_space.shape[0])
+
+        return state
 
 
     def render(self, mode='human'):
@@ -329,7 +337,6 @@ class UsvAsmcEnv(gym.Env):
 
         return self.viewer.render(return_rgb_array = mode == 'rgb_array')
 
-
     def close(self):
 
         if self.viewer:
@@ -337,15 +344,14 @@ class UsvAsmcEnv(gym.Env):
             self.viewer = None
 
     def compute_reward(self, ye, psi_ak, action_dot):
-        k_ye = 0.5
-        k_ak = 5.72
 
         psi_ak = np.abs(psi_ak)
 
-        reward_ye = np.exp(-k_ye*ye)
-        reward_ak = -np.exp(k_ak*(psi_ak - np.pi))
         reward_action = self.w_action*np.math.tanh(-self.c_action*np.power(action_dot, 2))
-        reward = reward_action + np.where(np.less(psi_ak, np.pi/2), reward_ye, reward_ak)
+        reward_ye = np.where(np.greater(ye, self.sigma_ye), np.exp(-self.k_ye*ye), np.exp(-self.k_ye*np.power(ye, 2)/self.sigma_ye))
+        reward_ak = -np.exp(self.k_ak*(psi_ak - np.pi))
+
+        reward = np.where(np.less(psi_ak, np.pi/2), reward_action + reward_ye, reward_ak)
         return reward
 
     def body_to_path(self, x2, y2, alpha):
