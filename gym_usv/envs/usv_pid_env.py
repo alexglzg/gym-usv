@@ -148,8 +148,8 @@ class UsvPidEnv(gym.Env):
         e_u_int = self.integral_step*(e_u + e_u_last)/2 + e_u_int
         e_u_dot = (e_u - e_u_last) / self.integral_step
 
-        ua_u = (kp_u * e_u) + (ki_u * e_u_int) + (kd_u * e_u_dot)
-        ua_psi = (kp_psi * e_psi) + (kd_psi * e_psi_dot)
+        ua_u = (self.kp_u * e_u) + (self.ki_u * e_u_int) + (self.kd_u * e_u_dot)
+        ua_psi = (self.kp_psi * e_psi) + (self.kd_psi * e_psi_dot)
 
         Tx = (-f_u + ua_u) / g_u
         Tz = (-f_psi + ua_psi) / g_psi
