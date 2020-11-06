@@ -14,3 +14,8 @@ register(
     id='usv-asmc-ye-int-v0',
     entry_point='gym_usv.envs:UsvAsmcYeIntEnv'
 )
+
+register(
+    id='usv-asmc-ca-v0',
+    entry_point='gym_usv.envs:UsvAsmcCaEnv'
+)
