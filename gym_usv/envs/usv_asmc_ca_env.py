@@ -17,8 +17,13 @@ class UsvAsmcCaEnv(gym.Env):
 
     def __init__(self):
 
+        #Integral step (or derivative) for 100 Hz
         self.integral_step = 0.01
+
+        #Minimum desired speed, will be unnecessary as DNN selects it
         self.min_speed = 0.3
+
+        #USV model coefficients
         self.X_u_dot = -2.25
         self.Y_v_dot = -23.13
         self.Y_r_dot = -1.31
@@ -38,6 +43,7 @@ class UsvAsmcCaEnv(gym.Env):
         self.B = 0.41
         self.c = 0.78
 
+        #ASMC gains
         self.k_u = 0.1
         self.k_psi = 0.2
         self.kmin_u = 0.05
@@ -49,34 +55,43 @@ class UsvAsmcCaEnv(gym.Env):
         self.lambda_u = 0.001
         self.lambda_psi = 1
 
+        #Reward gains
         self.k_ak = 5.72
         self.k_ye = 0.5
         self.sigma_ye = 1.
 
+        #Second order filter gains (for r_d)
         self.f1 = 2.
         self.f2 = 2.
         self.f3 = 2.
 
+        #Overall vector variables
         self.state = None
         self.velocity = None
         self.position = None
         self.aux_vars = None
         self.last = None
         self.target = None
+        self.so_filter = None
 
+        #Map limits in meters
         self.max_y = 10
         self.min_y = -10
         self.max_x = 30
         self.min_x = -10
 
+        #Variable for the visualizer
         self.viewer = None
 
+        #Min and max actions for the angle (change to -pi and pi if necessary)
         self.min_action = -np.pi/2
         self.max_action = np.pi/2
 
+        #Reward associated functions
         self.c_action = 1. / np.power((self.max_action/2-self.min_action/2)/self.integral_step, 2)
         self.w_action = 0.2
 
+        #Min and max values of the state
         self.min_uv = -1.5
         self.max_uv = 1.5
         self.min_r = -1.
@@ -86,6 +101,7 @@ class UsvAsmcCaEnv(gym.Env):
         self.min_psi_ak = -np.pi
         self.max_psi_ak = np.pi
 
+        #Min and max state vectors
         self.low_state = np.array([self.min_uv, self.min_uv, self.min_r, self.min_ye, self.min_psi_ak, self.min_action], dtype=np.float32)
         self.high_state = np.array([self.max_uv, self.max_uv, self.max_r, self.max_ye, self.max_psi_ak, self.max_action], dtype=np.float32)
 
@@ -97,6 +113,15 @@ class UsvAsmcCaEnv(gym.Env):
 
 
     def step(self, action):
+        '''
+        @name: step
+        @brief: ASMC and USV step, add obstacles and sensors.
+        @param: action: vector of actions
+        @return: state: state vector
+                 reward: reward from the current action
+                 done: if finished
+        '''
+        #Read overall vector variables
         state = self.state
         velocity = self.velocity
         position = self.position
@@ -105,36 +130,41 @@ class UsvAsmcCaEnv(gym.Env):
         target = self.target
         so_filter = self.so_filter
 
-
+        #Change from vectors to scalars
         u, v_ak, r_ak, ye, psi_ak, action_last = state
         u, v, r = velocity
         x, y, psi = position
         e_u_int, Ka_u, Ka_psi = aux_vars
         x_dot_last, y_dot_last, psi_dot_last, u_dot_last, v_dot_last, r_dot_last, e_u_last, Ka_dot_u_last, Ka_dot_psi_last = last
         x_0, y_0, desired_speed, ak, x_d, y_d = target
-        psi_d_last, o_dot_dot_last, o_dot_last, o_last = so_filter
+        psi_d_last, o_dot_dot_last, o_dot_last, o_last, o, o_dot, o_dot_dot = so_filter
 
+        #Create model related vectors
         eta = np.array([x, y, psi])
         upsilon = np.array([u, v, r])
         eta_dot_last = np.array([x_dot_last, y_dot_last, psi_dot_last])
         upsilon_dot_last = np.array([u_dot_last, v_dot_last, r_dot_last])
 
+        #Calculate action derivative for reward
         action_dot = (action - action_last)/self.integral_step
         action_last = action
 
+        #Compute the desired heading
         psi_d = action + psi
         psi_d = np.where(np.greater(np.abs(psi_d), np.pi), (np.sign(psi_d))*(np.abs(psi_d)-2*np.pi), psi_d)
 
+        #Second order filter to compute desired yaw rate
         r_d = (psi_d - psi_d_last) / self.integral_step
         psi_d_last = psi_d
         o_dot_dot = (((r_d - o_last) * self.f1) - (self.f3 * o_dot_last)) * self.f2
-        o_dot = (integral_step)*(o_dot_dot + o_dot_dot_last)/2 + o_dot
-        o = (integral_step)*(o_dot + o_dot_last)/2 + o
+        o_dot = (self.integral_step)*(o_dot_dot + o_dot_dot_last)/2 + o_dot
+        o = (self.integral_step)*(o_dot + o_dot_last)/2 + o
         r_d = o
         o_last = o
         o_dot_last = o_dot
         o_dot_dot_last = o_dot_dot
 
+        #Compute variable hydrodynamic coefficients
         Xu = -25
         Xuu = 0
         if(abs(upsilon[0]) > 1.2):
@@ -150,44 +180,53 @@ class UsvAsmcCaEnv(gym.Env):
         Nr = 0.02*(-3.141592*1000) * \
             np.sqrt(np.power(upsilon[0], 2)+np.power(upsilon[1], 2))*0.09*0.09*1.01*1.01
 
+        #Rewrite USV model in simplified components f and g
         g_u = 1 / (self.m - self.X_u_dot)
         g_psi = 1 / (self.Iz - self.N_r_dot)
-
         f_u = (((self.m - self.Y_v_dot)*upsilon[1]*upsilon[2] + (Xuu*np.abs(upsilon[0]) + Xu*upsilon[0])) / (self.m - self.X_u_dot))
         f_psi = (((-self.X_u_dot + self.Y_v_dot)*upsilon[0]*upsilon[1] + (Nr * upsilon[2])) / (self.Iz - self.N_r_dot))
 
+        #Compute heading error
         e_psi = psi_d - eta[2]
         e_psi = np.where(np.greater(np.abs(e_psi), np.pi), (np.sign(e_psi))*(np.abs(e_psi)-2*np.pi), e_psi)
         e_psi_dot = r_d - upsilon[2]
 
         abs_e_psi = np.abs(e_psi)
 
+        #Compute desired speed (unnecessary if DNN gives it)
         u_psi = 1/(1 + np.exp(10*(abs_e_psi*(2/np.pi) - 0.5)))
 
         u_d_high = (desired_speed - self.min_speed)*u_psi + self.min_speed
         u_d = u_d_high
 
+        #Compute speed error
         e_u = u_d - upsilon[0]
         e_u_int = self.integral_step*(e_u + e_u_last)/2 + e_u_int
 
+        #Create sliding surfaces for speed and heading
         sigma_u = e_u + self.lambda_u * e_u_int
         sigma_psi = e_psi_dot + self.lambda_psi * e_psi
 
+        #Compute ASMC gain derivatives
         Ka_dot_u = np.where(np.greater(Ka_u, self.kmin_u), self.k_u * np.sign(np.abs(sigma_u) - self.mu_u), self.kmin_u)
         Ka_dot_psi = np.where(np.greater(Ka_psi, self.kmin_psi), self.k_psi * np.sign(np.abs(sigma_psi) - self.mu_psi), self.kmin_psi)
 
+        #Compute gains
         Ka_u = self.integral_step*(Ka_dot_u + Ka_dot_u_last)/2 + Ka_u
         Ka_dot_u_last = Ka_dot_u
 
         Ka_psi = self.integral_step*(Ka_dot_psi + Ka_dot_psi_last)/2 + Ka_psi
         Ka_dot_psi_last = Ka_dot_psi
 
+        #Compute ASMC for speed and heading
         ua_u = (-Ka_u * np.power(np.abs(sigma_u), 0.5) * np.sign(sigma_u)) - (self.k2_u * sigma_u)
         ua_psi = (-Ka_psi * np.power(np.abs(sigma_psi), 0.5) * np.sign(sigma_psi)) - (self.k2_psi * sigma_psi)
 
+        #Compute control inputs for speed and heading
         Tx = ((self.lambda_u * e_u) - f_u - ua_u) / g_u
         Tz = ((self.lambda_psi * e_psi) - f_psi - ua_psi) / g_psi
 
+        #Compute both thrusters and saturate their values
         Tport = (Tx / 2) + (Tz / self.B)
         Tstbd = (Tx / (2*self.c)) - (Tz / (self.B*self.c))
 
@@ -196,6 +235,7 @@ class UsvAsmcCaEnv(gym.Env):
         Tstbd = np.where(np.greater(Tstbd, 36.5), 36.5, Tstbd)
         Tstbd = np.where(np.less(Tstbd, -30), -30, Tstbd)
 
+        #Compute USV model matrices
         M = np.array([[self.m - self.X_u_dot, 0, 0],
                       [0, self.m - self.Y_v_dot, 0 - self.Y_r_dot],
                       [0, 0 - self.N_v_dot, self.Iz - self.N_r_dot]])
@@ -223,16 +263,19 @@ class UsvAsmcCaEnv(gym.Env):
 
         D = Dl - Dn
 
+        #Compute acceleration and velocity in body
         upsilon_dot = np.matmul(np.linalg.inv(
             M), (T - np.matmul(C, upsilon) - np.matmul(D, upsilon)))
         upsilon = (self.integral_step) * (upsilon_dot +
                                                upsilon_dot_last)/2 + upsilon  # integral
         upsilon_dot_last = upsilon_dot
 
+        #Rotation matrix
         J = np.array([[np.cos(eta[2]), -np.sin(eta[2]), 0],
                       [np.sin(eta[2]), np.cos(eta[2]), 0],
                       [0, 0, 1]])
 
+        #Compute NED position
         eta_dot = np.matmul(J, upsilon)  # transformation into local reference frame
         eta = (self.integral_step)*(eta_dot+eta_dot_last)/2 + eta  # integral
         eta_dot_last = eta_dot
@@ -240,29 +283,36 @@ class UsvAsmcCaEnv(gym.Env):
         psi = eta[2]
         psi = np.where(np.greater(np.abs(psi), np.pi), (np.sign(psi))*(np.abs(psi)-2*np.pi), psi)
 
+        #Compute angle between USV and path
         psi_ak = psi - ak
         psi_ak = np.where(np.greater(np.abs(psi_ak), np.pi), (np.sign(psi_ak))*(np.abs(psi_ak)-2*np.pi), psi_ak)
 
+        #Compute cross-track error
         ye = -(eta[0] - x_0)*np.math.sin(ak) + (eta[1] - y_0)*np.math.cos(ak)
         ye_abs = np.abs(ye)
 
+        #Compute reward
         reward = self.compute_reward(ye_abs, psi_ak, action_dot)
 
+        #Compute velocities relative to path (for ye derivative as ye_dot = v_ak)
         u_ak, v_ak = self.body_to_path(upsilon[0], upsilon[1], psi_ak)
 
+        #If ye is too large or USV went backwards too much, abort
         if ye_abs > self.max_ye or eta[0] < self.min_x:
             done = True
             reward = -1
         else:
             done = False
 
+        #Fill overall vector variables
         self.state = np.array([upsilon[0], v_ak, upsilon[2], ye, psi_ak, action_last])
         self.velocity = np.array([upsilon[0], upsilon[1], upsilon[2]])
         self.position = np.array([eta[0], eta[1], psi])
         self.aux_vars = np.array([e_u_int, Ka_u, Ka_psi])
         self.last = np.array([eta_dot_last[0], eta_dot_last[1], eta_dot_last[2], upsilon_dot_last[0], upsilon_dot_last[1], upsilon_dot_last[2], e_u_last, Ka_dot_u_last, Ka_dot_psi_last])
-        self.so_filter = np.array([psi_d_last, o_dot_dot_last, o_dot_last, o_last])
+        self.so_filter = np.array([psi_d_last, o_dot_dot_last, o_dot_last, o_last, o, o_dot, o_dot_dot])
 
+        #Reshape state
         state = self.state.reshape(self.observation_space.shape[0])
 
         return state, reward, done, {}
@@ -284,10 +334,13 @@ class UsvAsmcCaEnv(gym.Env):
         Ka_dot_u_last = 0.
         Ka_dot_psi_last = 0.
         action_last = 0.
-        psi_d_last = 0.
+        psi_d_last = psi
         o_dot_dot_last = 0.
         o_dot_last = 0.
         o_last = 0.
+        o_dot_dot = 0.
+        o_dot = 0.
+        o = 0.
 
         x_0 = np.random.uniform(low=-2.5, high=2.5)
         y_0 = np.random.uniform(low=-2.5, high=2.5)
@@ -311,7 +364,7 @@ class UsvAsmcCaEnv(gym.Env):
         self.aux_vars = np.array([e_u_int, Ka_u, Ka_psi])
         self.last = np.array([eta_dot_last[0], eta_dot_last[1], eta_dot_last[2], upsilon_dot_last[0], upsilon_dot_last[1], upsilon_dot_last[2], e_u_last, Ka_dot_u_last, Ka_dot_psi_last])
         self.target = np.array([x_0, y_0, desired_speed, ak, x_d, y_d])
-        self.so_filter = np.array([psi_d_last, o_dot_dot_last, o_dot_last, o_last])
+        self.so_filter = np.array([psi_d_last, o_dot_dot_last, o_dot_last, o_last, o, o_dot, o_dot_dot])
 
         state = self.state.reshape(self.observation_space.shape[0])
 
@@ -333,8 +386,8 @@ class UsvAsmcCaEnv(gym.Env):
             self.viewer = rendering.Viewer(screen_width, screen_height)
 
             clearance = 10
-            l, r, t, b = -boat_width/2, boat_width/2, boat_height, 0
-            boat = rendering.FilledPolygon([(l,b), (l,t), (r,t), (r,b)])
+            l, r, t, b, c, m = -boat_width/2, boat_width/2, boat_height, 0, 0, boat_height/2
+            boat = rendering.FilledPolygon([(l,b), (l,m), (c,t), (r,m), (r,b)])
             boat.add_attr(rendering.Transform(translation=(0, clearance)))
             self.boat_trans = rendering.Transform()
             boat.add_attr(self.boat_trans)
