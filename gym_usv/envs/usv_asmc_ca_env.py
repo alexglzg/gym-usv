@@ -10,6 +10,7 @@ avoidance on the OpenAI Gym library.
 import gym
 from gym import error, spaces, utils
 from gym.utils import seeding
+from gym.envs.classic_control import rendering
 import numpy as np
 
 class UsvAsmcCaEnv(gym.Env):
@@ -100,6 +101,12 @@ class UsvAsmcCaEnv(gym.Env):
         self.max_ye = 10
         self.min_psi_ak = -np.pi
         self.max_psi_ak = np.pi
+
+        #Obstacle variables
+        self.num_obs = None
+        self.posx = None
+        self.posy = None
+        self.radius = None
 
         #Min and max state vectors
         self.low_state = np.array([self.min_uv, self.min_uv, self.min_r, self.min_ye, self.min_psi_ak, self.min_action], dtype=np.float32)
@@ -321,7 +328,7 @@ class UsvAsmcCaEnv(gym.Env):
     def reset(self):
 
         x = np.random.uniform(low=-2.5, high=2.5)
-        y = np.random.uniform(low=-2.5, high=2.5)
+        y = np.random.uniform(low=-5.0, high=5.0)
         psi = np.random.uniform(low=-np.pi, high=np.pi)
         eta = np.array([x, y])
         upsilon = np.array([0.,0.,0.])
@@ -343,10 +350,15 @@ class UsvAsmcCaEnv(gym.Env):
         o = 0.
 
         x_0 = np.random.uniform(low=-2.5, high=2.5)
-        y_0 = np.random.uniform(low=-2.5, high=2.5)
+        y_0 = np.random.uniform(low=-5.0, high=5.0)
         x_d = np.random.uniform(low=15, high=30)
         y_d = y_0
         desired_speed = np.random.uniform(low=0.4, high=1.4)
+
+        self.num_obs = np.random.random_integers(low=20, high=40)
+        self.posx = np.random.normal(15,10,size=(self.num_obs,1))
+        self.posy = np.random.uniform(low=-10, high=10, size=(self.num_obs,1))
+        self.radius = np.random.uniform(low=0.1, high=1.5, size=(self.num_obs,1))
 
         ak = np.math.atan2(y_d-y_0,x_d-x_0)
         ak = np.float32(ak)
@@ -382,10 +394,9 @@ class UsvAsmcCaEnv(gym.Env):
         boat_height = 20
 
         if self.viewer is None:
-            from gym.envs.classic_control import rendering
             self.viewer = rendering.Viewer(screen_width, screen_height)
 
-            clearance = 10
+            clearance = -10
             l, r, t, b, c, m = -boat_width/2, boat_width/2, boat_height, 0, 0, boat_height/2
             boat = rendering.FilledPolygon([(l,b), (l,m), (c,t), (r,m), (r,b)])
             boat.add_attr(rendering.Transform(translation=(0, clearance)))
@@ -393,19 +404,25 @@ class UsvAsmcCaEnv(gym.Env):
             boat.add_attr(self.boat_trans)
             self.viewer.add_geom(boat)
 
-        x_0 = (self.target[0] - self.min_x)*scale
+        x_0 = (self.min_x - self.min_x)*scale
         y_0 = (self.target[1] - self.min_y)*scale
-        x_d = (self.target[4] - self.min_x)*scale
+        x_d = (self.max_x - self.min_x)*scale
         y_d = (self.target[5] - self.min_y)*scale
         start = (y_0, x_0)
         end = (y_d, x_d)
 
         self.viewer.draw_line(start, end)
 
+        for i in range(self.num_obs):
+            transform2 = rendering.Transform(translation=((self.posy[i]-self.min_y)*scale, (self.posx[i]-self.min_x)*scale))  # Relative offset
+            self.viewer.draw_circle(self.radius[i]*scale, 30, True, color=(0, 0, 255)).add_attr(transform2)
+
         x = self.position[0]
         y = self.position[1]
         psi = self.position[2]
 
+        safety = rendering.Transform(translation=((y-self.min_y)*scale, (x-self.min_x)*scale))  # Relative offset
+        self.viewer.draw_circle(0.7*scale, 30, False, color=(255, 0, 0)).add_attr(safety)
         self.boat_trans.set_translation((y-self.min_y)*scale, (x-self.min_x)*scale)
         self.boat_trans.set_rotation(-psi)
 
