@@ -21,9 +21,6 @@ class UsvAsmcCaEnv(gym.Env):
         #Integral step (or derivative) for 100 Hz
         self.integral_step = 0.01
 
-        #Minimum desired speed, will be unnecessary as DNN selects it
-        self.min_speed = 0.3
-
         #USV model coefficients
         self.X_u_dot = -2.25
         self.Y_v_dot = -23.13
@@ -56,11 +53,6 @@ class UsvAsmcCaEnv(gym.Env):
         self.lambda_u = 0.001
         self.lambda_psi = 1
 
-        #Reward gains
-        self.k_ak = 5.72
-        self.k_ye = 0.5
-        self.sigma_ye = 1.
-
         #Second order filter gains (for r_d)
         self.f1 = 2.
         self.f2 = 2.
@@ -75,6 +67,15 @@ class UsvAsmcCaEnv(gym.Env):
         self.target = None
         self.so_filter = None
 
+        #Obstacle variables
+        self.num_obs = None
+        self.posx = None
+        self.posy = None
+        self.radius = None
+        
+        # Sensorvariable
+        self.sensors = np.zeros((800, 2))
+
         #Map limits in meters
         self.max_y = 10
         self.min_y = -10
@@ -84,13 +85,26 @@ class UsvAsmcCaEnv(gym.Env):
         #Variable for the visualizer
         self.viewer = None
 
-        #Min and max actions for the angle (change to -pi and pi if necessary)
-        self.min_action = -np.pi/2
-        self.max_action = np.pi/2
+        #Min and max actions 
+        # velocity 
+        self.min_action0 = 0
+        self.max_action0 = 1.4
+        # angle (change to -pi and pi if necessary)
+        self.min_action1 = -np.pi/2
+        self.max_action1 = np.pi/2
 
-        #Reward associated functions
-        self.c_action = 1. / np.power((self.max_action/2-self.min_action/2)/self.integral_step, 2)
-        self.w_action = 0.2
+        #Reward associated functions anf gains
+        self.k_ak = 5.72
+        self.k_ye = 0.5
+        self.gamma_theta = 0.005 
+        self.gamma_x = 4.0
+        self.epsilon = 0.001
+        self.sigma_ye = 1
+        self.lambda_reward = 0.5
+        self.w_action0 = 0.2
+        self.w_action1 = 0.2
+        self.c_action0 = 1. / np.power((self.max_action0/2-self.min_action0/2)/self.integral_step, 2)
+        self.c_action1 = 1. / np.power((self.max_action1/2-self.min_action1/2)/self.integral_step, 2)
 
         #Min and max values of the state
         self.min_uv = -1.5
@@ -102,12 +116,6 @@ class UsvAsmcCaEnv(gym.Env):
         self.min_psi_ak = -np.pi
         self.max_psi_ak = np.pi
 
-        #Obstacle variables
-        self.num_obs = None
-        self.posx = None
-        self.posy = None
-        self.radius = None
-
         #Min and max state vectors
         self.low_state = np.array([self.min_uv, self.min_uv, self.min_r, self.min_ye, self.min_psi_ak, self.min_action], dtype=np.float32)
         self.high_state = np.array([self.max_uv, self.max_uv, self.max_r, self.max_ye, self.max_psi_ak, self.max_action], dtype=np.float32)
@@ -117,7 +125,6 @@ class UsvAsmcCaEnv(gym.Env):
 
         self.observation_space = spaces.Box(low=self.low_state, high=self.high_state,
                                             dtype=np.float32)
-
 
     def step(self, action):
         '''
@@ -324,7 +331,6 @@ class UsvAsmcCaEnv(gym.Env):
 
         return state, reward, done, {}
 
-
     def reset(self):
 
         x = np.random.uniform(low=-2.5, high=2.5)
@@ -382,7 +388,6 @@ class UsvAsmcCaEnv(gym.Env):
 
         return state
 
-
     def render(self, mode='human'):
 
         screen_width = 400
@@ -436,15 +441,33 @@ class UsvAsmcCaEnv(gym.Env):
             self.viewer.close()
             self.viewer = None
 
-    def compute_reward(self, ye, psi_ak, action_dot):
-
-        psi_ak = np.abs(psi_ak)
-
-        reward_action = self.w_action*np.math.tanh(-self.c_action*np.power(action_dot, 2))
-        reward_ye = np.where(np.greater(ye, self.sigma_ye), np.exp(-self.k_ye*ye), np.exp(-self.k_ye*np.power(ye, 2)/self.sigma_ye))
-        reward_ak = -np.exp(self.k_ak*(psi_ak - np.pi))
-
-        reward = np.where(np.less(psi_ak, np.pi/2), reward_action + reward_ye, reward_ak)
+    def compute_reward(self, ye, chi_ak, action_dot, collision, u_ref, u, v):
+        if (collision == False):
+            chi_ak = np.abs(chi_ak)
+            # Cross tracking reward
+            reward_ye = np.where(np.greater(ye, self.sigma_ye), np.exp(-self.k_ye*ye), np.exp(-self.k_ye*np.power(ye, 2)/self.sigma_ye))
+            # Velocity reward
+            reward_u = np.exp(-self.k_u*np.abs(u_ref-np.sqrt(u*u+v*v)))
+            # Angle reward
+            reward_chi = np.cos(chi_ak)
+            # Action velocity gradual change reward
+            reward_a0 = self.w_action0*np.math.tanh(-self.c_action0*np.power(action_dot0, 2))
+            # Action angle gradual change reward
+            reward_a1 = self.w_action1*np.math.tanh(-self.c_action1*np.power(action_dot1, 2))
+            # Path following reward 
+            reward_pf = reward_ye + reward_chi + reward_u + reward_a0 + reward_a1 
+            # Obstacle avoidance reward
+            numerator = 0.0
+            denominator = 0.0
+            for i in range(len(self.sensors)):
+                numerator = numerator + (1/(1+self.gamma_theta*self.sensors[i][1]))*(1/(self.gamma_x*np.max(self.sensors[i][0], self.epsilon)))
+                denominator = denominator + 1/(1+np.abs(self.gamma_theta*self.sensors[i][1]))
+            reward_oa = numerator/denominator
+            # Total non-collision reward
+            reward = self.lambda_reward*reward_pf + (1-self.lambda_reward)*reward_oa
+        else:
+            # Collision Reward
+            reward = -1
         return reward
 
     def body_to_path(self, x2, y2, alpha):
