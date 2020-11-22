@@ -102,13 +102,16 @@ class UsvAsmcCaEnv(gym.Env):
         self.max_action1 = np.pi/2
 
         #Reward associated functions anf gains
-        self.k_ak = 5.72
+        self.w_y = 0.4
+        self.w_u = 0.2
+        self.w_chi = 0.4
         self.k_ye = 0.5
-        self.gamma_theta = 0.005 
-        self.gamma_x = 4.0
-        self.epsilon = 0.001
+        self.k_uu = 15.0
+        self.gamma_theta = 1.0 
+        self.gamma_x = 1.0
+        self.epsilon = 1.0
         self.sigma_ye = 1.
-        self.lambda_reward = 0.5
+        self.lambda_reward = 0.9
         self.w_action0 = 0.2
         self.w_action1 = 0.2
         self.c_action0 = 1. / np.power((self.max_action0/2-self.min_action0/2)/self.integral_step, 2)
@@ -131,6 +134,7 @@ class UsvAsmcCaEnv(gym.Env):
         self.max_u_ref = 1.4
         self.min_sectors = np.zeros((25))
         self.max_sectors = np.full((25), 100.)
+        self.sectors = np.zeros((25))
 
         #Min and max state vectors 
         self.low_state = np.hstack((self.min_u, self.min_v, self.min_r, self.min_ye, self.min_ye_dot, self.min_chi_ak, self.min_u_ref, self.min_sectors, self.min_action0, self.min_action1))
@@ -182,12 +186,12 @@ class UsvAsmcCaEnv(gym.Env):
         action_last0 = action[0]
         action_last1 = action[1]
 
-        beta = np.math.asin(upsilon[0]/(self.epsilon + np.sqrt(upsilon[0]*upsilon[0]+upsilon[1]*upsilon[1])))
+        beta = np.math.asin(upsilon[0]/(0.001 + np.sqrt(upsilon[0]*upsilon[0]+upsilon[1]*upsilon[1])))
         chi = psi + beta
         chi = np.where(np.greater(np.abs(chi), np.pi), (np.sign(chi))*(np.abs(chi)-2*np.pi), chi)
 
         #Compute the desired heading
-        psi_d = ak + action[1]
+        psi_d = chi + action[1]
         psi_d = np.where(np.greater(np.abs(psi_d), np.pi), (np.sign(psi_d))*(np.abs(psi_d)-2*np.pi), psi_d)
 
         #Second order filter to compute desired yaw rate
@@ -316,7 +320,7 @@ class UsvAsmcCaEnv(gym.Env):
         psi = eta[2]
         psi = np.where(np.greater(np.abs(psi), np.pi), (np.sign(psi))*(np.abs(psi)-2*np.pi), psi)
 
-        beta = np.math.asin(upsilon[0]/(self.epsilon + np.sqrt(upsilon[0]*upsilon[0]+upsilon[1]*upsilon[1])))
+        beta = np.math.asin(upsilon[0]/(0.001 + np.sqrt(upsilon[0]*upsilon[0]+upsilon[1]*upsilon[1])))
         chi = psi + beta
         chi = np.where(np.greater(np.abs(chi), np.pi), (np.sign(chi))*(np.abs(chi)-2*np.pi), chi)
         #Compute angle between USV and path
@@ -386,8 +390,9 @@ class UsvAsmcCaEnv(gym.Env):
                             break
                         opening_width = 0
                 if opening_found == False:
-                    sectors[i] = x[x_index];
-                    
+                    sectors[i] = x[x_index]
+        self.sectors = sectors
+        sectors = (1-sectors/100)            
 
         #Compute reward 
         reward = self.compute_reward(ye_abs, chi_ak, action_dot0, action_dot1, collision, u_ref, u, v)
@@ -461,7 +466,6 @@ class UsvAsmcCaEnv(gym.Env):
 
         xe_dot, ye_dot = self.body_to_path(upsilon[0], upsilon[1], psi_ak)
 
-
         collision = False
         # Compute collision
         distance = np.empty([self.num_obs])
@@ -518,7 +522,9 @@ class UsvAsmcCaEnv(gym.Env):
                             break
                         opening_width = 0
                 if opening_found == False:
-                    sectors[i] = x[x_index];
+                    sectors[i] = x[x_index]
+        self.sectors = sectors
+        sectors = (1-sectors/100)
 
         self.state = np.hstack((upsilon[0], upsilon[1], upsilon[2], ye, ye_dot, psi_ak, u_ref, sectors, action0_last, action1_last))
         self.position = np.array([eta[0], eta[1], psi])
@@ -576,6 +582,19 @@ class UsvAsmcCaEnv(gym.Env):
 
         self.viewer.draw_line(start, end)
 
+        angle = -(2/3)*np.pi + psi + 0.08377
+        angle = np.where(np.greater(np.abs(angle), np.pi), np.sign(angle)*(np.abs(angle)-2*np.pi), angle)
+        for i in range(self.sector_num):
+          initial = ((y-self.min_y)*scale, (x-self.min_x)*scale)
+          m = np.math.tan(angle)
+          x_f = self.sectors[i]*np.math.cos(angle) + x - self.min_x
+          y_f = self.sectors[i]*np.math.sin(angle) + y - self.min_y
+          final = (y_f*scale, x_f*scale)
+          self.viewer.draw_line(initial, final)
+          angle = angle + .1675
+          angle = np.where(np.greater(np.abs(angle), np.pi), np.sign(angle)*(np.abs(angle)-2*np.pi), angle)
+
+
         return self.viewer.render(return_rgb_array = mode == 'rgb_array')
 
     def close(self):
@@ -590,22 +609,22 @@ class UsvAsmcCaEnv(gym.Env):
             # Cross tracking reward
             reward_ye = np.where(np.greater(ye, self.sigma_ye), np.exp(-self.k_ye*ye), np.exp(-self.k_ye*np.power(ye, 2)/self.sigma_ye))
             # Velocity reward
-            reward_u = np.exp(-self.k_u*np.abs(u_ref-np.sqrt(u*u+v*v)))
+            reward_u = np.exp(-self.k_uu*np.abs(u_ref-np.sqrt(u*u+v*v)))
             # Angle reward
             reward_chi = np.cos(chi_ak)
             # Action velocity gradual change reward
-            reward_a0 = self.w_action0*np.math.tanh(-self.c_action0*np.power(action_dot0, 2))
+            reward_a0 = np.math.tanh(-self.c_action0*np.power(action_dot0, 2))
             # Action angle gradual change reward
-            reward_a1 = self.w_action1*np.math.tanh(-self.c_action1*np.power(action_dot1, 2))
+            reward_a1 = np.math.tanh(-self.c_action1*np.power(action_dot1, 2))
             # Path following reward 
-            reward_pf = reward_ye + reward_chi + reward_u + reward_a0 + reward_a1 
+            reward_pf = self.w_y*reward_ye + self.w_chi*reward_chi + self.w_u*reward_u + self.w_action0*reward_a0 + self.w_action1*reward_a1 
             # Obstacle avoidance reward
             numerator = 0.0
             denominator = 0.0
             for i in range(len(self.sensors)):
                 numerator = numerator + (1./(1.+self.gamma_theta*self.sensors[i][1]))*(1./(self.gamma_x*np.max([self.sensors[i][0], self.epsilon])))
                 denominator = denominator + 1/(1+np.abs(self.gamma_theta*self.sensors[i][1]))
-            reward_oa = numerator/denominator
+            reward_oa = -numerator/denominator
             # Total non-collision reward
             reward = self.lambda_reward*reward_pf + (1-self.lambda_reward)*reward_oa
         else:
