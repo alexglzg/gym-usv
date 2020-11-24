@@ -183,15 +183,16 @@ class UsvAsmcCaEnv(gym.Env):
         #Calculate action derivative for reward
         action_dot0 = (action[0] - action0_last)/self.integral_step
         action_dot1 = (action[1] - action1_last)/self.integral_step
-        action_last0 = action[0]
-        action_last1 = action[1]
+        action0_last = action[0]
+        action1_last = action[1]
 
         beta = np.math.asin(upsilon[0]/(0.001 + np.sqrt(upsilon[0]*upsilon[0]+upsilon[1]*upsilon[1])))
         chi = psi + beta
         chi = np.where(np.greater(np.abs(chi), np.pi), (np.sign(chi))*(np.abs(chi)-2*np.pi), chi)
 
         #Compute the desired heading
-        psi_d = chi + action[1]
+        #psi_d = chi + action[1]
+        psi_d = ak + action[1]
         psi_d = np.where(np.greater(np.abs(psi_d), np.pi), (np.sign(psi_d))*(np.abs(psi_d)-2*np.pi), psi_d)
 
         #Second order filter to compute desired yaw rate
@@ -343,27 +344,32 @@ class UsvAsmcCaEnv(gym.Env):
             if distance[i] < self.safety_distance:
                 collision == True
 
-        # Compute sensor readings
+         # Compute sensor readings
         obs_order = np.argsort(distance) # order obstacles in closest to furthest
         for i in range(len(self.sensors)):
             self.sensors[i][0]= -np.pi*2/3 + i*self.lidar_resolution
-            m = np.math.tan(self.sensors[i][0])
+            self.sensors[i][1] = 100
+            sensor_angle = psi + self.sensors[i][0]
+            sensor_angle = np.where(np.greater(np.abs(sensor_angle), np.pi), np.sign(sensor_angle)*(np.abs(sensor_angle)-2*np.pi), sensor_angle)
+            #m = np.math.tan(self.sensors[i][0]
             for j in range(self.num_obs):
                 obs_index = obs_order[j]
-                posx,posy = self.ned_to_body(self.posx[obs_index], self.posy[obs_index], eta[0], eta[1], eta[2])
-                delta = ((self.radius[j]*self.radius[j])*(1+(m*m))) - (posx-m*posy)*(posx-m*posy)
-                if delta >= 0: # intersection
-                    y1 = (posy+posx*m+np.sqrt(delta))/(1+m*m)
-                    y2 = (posy+posx*m-np.sqrt(delta))/(1+m*m)
-                    x1 = (posy*m+posx*m*m+m*np.sqrt(delta))/(1+m*m)
-                    x2 = (posy*m+posx*m*m-m*np.sqrt(delta))/(1+m*m)
-                    distance1 = np.sqrt(x1*x1+y1*y1)
-                    distance2 = np.sqrt(x2*x2+y2*y2)
-                    if distance1 > distance2:
-                      self.sensors[i][1] = distance2
-                    else:
-                      self.sensors[i][1] = distance1
-                    break
+                posx,posy = self.ned_to_body(self.posx[obs_index], self.posy[obs_index], eta[0], eta[1], sensor_angle)
+                posy = -posy
+                if posx >= 0: #obstacle infront of sensor)
+                    delta = (self.radius[obs_index]*self.radius[obs_index])-(posy)*(posy)
+                    if delta >= 0: # intersection
+                        y1 = 0
+                        y2 = 0
+                        x1 = posx+np.sqrt(delta)
+                        x2 = posx-np.sqrt(delta)
+                        distance1 = np.sqrt(x1*x1+y1*y1)
+                        distance2 = np.sqrt(x2*x2+y2*y2)
+                        if distance1 > distance2:
+                          self.sensors[i][1] = distance2
+                        else:
+                          self.sensors[i][1] = distance1
+                        break
                 else:
                     self.sensors[i][1] = 100
 
@@ -380,7 +386,7 @@ class UsvAsmcCaEnv(gym.Env):
                 for k in range(self.sector_size):
                     if x[k] > x[x_index]:
                         opening_width = opening_width + arc_length
-                        if opening_width > (self.boat_radius+self.safety_radius):
+                        if opening_width > (2*(self.boat_radius+self.safety_radius)):
                             opening_found = True
                             break
                     else:
@@ -450,7 +456,7 @@ class UsvAsmcCaEnv(gym.Env):
         # Desired speed
         u_ref = np.random.uniform(low=self.min_u_ref, high=self.max_u_ref)
         # number of obstacles 
-        self.num_obs = np.random.random_integers(low=1, high=10)
+        self.num_obs = np.random.random_integers(low=20, high=40)
         # array of positions in x and y and radius
         self.posx = np.random.normal(15,10,size=(self.num_obs,1))
         self.posy = np.random.uniform(low=-10, high=10, size=(self.num_obs,1))
@@ -482,40 +488,24 @@ class UsvAsmcCaEnv(gym.Env):
             self.sensors[i][1] = 100
             sensor_angle = psi + self.sensors[i][0]
             sensor_angle = np.where(np.greater(np.abs(sensor_angle), np.pi), np.sign(sensor_angle)*(np.abs(sensor_angle)-2*np.pi), sensor_angle)
-            #m = np.math.tan(self.sensors[i][0]
             for j in range(self.num_obs):
                 obs_index = obs_order[j]
                 posx,posy = self.ned_to_body(self.posx[obs_index], self.posy[obs_index], eta[0], eta[1], sensor_angle)
                 posy = -posy
                 if posx >= 0: #obstacle infront of sensor
-                    #delta = ((self.radius[j]*self.radius[j])*(1+(m*m))) - (posx-m*posy)*(posx-m*posy)
-                    delta = (self.radius[j]*self.radius[j])-(posy)*(posy)
+                    delta = (self.radius[obs_index]*self.radius[obs_index])-(posy)*(posy)
                     if delta >= 0: # intersection
-                        print("delta")
-                        print(delta)
-                        #y1 = (posy+posx*m+np.sqrt(delta))/(1+m*m)
-                        #y2 = (posy+posx*m-np.sqrt(delta))/(1+m*m)
                         y1 = 0
                         y2 = 0
-                        #x1 = (posy*m+posx*m*m+m*np.sqrt(delta))/(1+m*m)
-                        #x2 = (posy*m+posx*m*m-m*np.sqrt(delta))/(1+m*m)
                         x1 = posx+np.sqrt(delta)
                         x2 = posx-np.sqrt(delta)
-                        
-                        print("position")
-                        print(x1, y1)
-                        print(x2,y2)
-                        print("angle")
-                        print(self.sensors[i])
-                        print("obsatcle")
-                        print(posx , posy)
                         distance1 = np.sqrt(x1*x1+y1*y1)
                         distance2 = np.sqrt(x2*x2+y2*y2)
                         if distance1 > distance2:
                           self.sensors[i][1] = distance2
                         else:
                           self.sensors[i][1] = distance1
-                    break
+                        break
                 else:
                     self.sensors[i][1] = 100
 
@@ -532,7 +522,7 @@ class UsvAsmcCaEnv(gym.Env):
                 for k in range(self.sector_size):
                     if x[k] > x[x_index]:
                         opening_width = opening_width + arc_length
-                        if opening_width > (self.boat_radius+self.safety_radius):
+                        if opening_width > (2*(self.boat_radius+self.safety_radius)):
                             opening_found = True
                             break
                     else:
@@ -543,6 +533,7 @@ class UsvAsmcCaEnv(gym.Env):
                         opening_width = 0
                 if opening_found == False:
                     sectors[i] = x[x_index]
+
         self.sectors = sectors
         sectors = (1-sectors/100)
 
@@ -596,24 +587,38 @@ class UsvAsmcCaEnv(gym.Env):
         psi = self.position[2]
 
         safety = rendering.Transform(translation=((y-self.min_y)*scale, (x-self.min_x)*scale))  # Relative offset
-        self.viewer.draw_circle((self.boat_radius+self.safety_radius)*scale, 30, False, color=(255, 0, 0)).add_attr(safety)
-        self.boat_trans.set_translation((y-self.min_y)*scale, (x-self.min_x)*scale)
-        self.boat_trans.set_rotation(-psi)
 
-        self.viewer.draw_line(start, end, color=(255, 0, 0))
-
-        angle = -(2/3)*np.pi + psi + 0.08377
-        angle = np.where(np.greater(np.abs(angle), np.pi), np.sign(angle)*(np.abs(angle)-2*np.pi), angle)
-        for i in range(self.sector_num):
+        for i in range(len(self.sensors)):
+          angle = self.sensors[i][0] + psi
+          angle = np.where(np.greater(np.abs(angle), np.pi), np.sign(angle)*(np.abs(angle)-2*np.pi), angle)
           initial = ((y-self.min_y)*scale, (x-self.min_x)*scale)
           m = np.math.tan(angle)
-          x_f = self.sectors[i]*np.math.cos(angle) + x - self.min_x
-          y_f = self.sectors[i]*np.math.sin(angle) + y - self.min_y
+          x_f = self.sensors[i][1]*np.math.cos(angle) + x - self.min_x
+          y_f = self.sensors[i][1]*np.math.sin(angle) + y - self.min_y
+          final = (y_f*scale, x_f*scale)
+          section = np.int(np.floor(i/self.sector_size))
+          if self.sectors[section] < 100:
+              self.viewer.draw_line(initial, final, color=(255, 0, 0))
+          else:
+              self.viewer.draw_line(initial, final, color=(0, 255, 0))
+          
+        angle = -(2/3)*np.pi + psi #+ 0.08377
+        angle = np.where(np.greater(np.abs(angle), np.pi), np.sign(angle)*(np.abs(angle)-2*np.pi), angle)
+        for i in range(self.sector_num+1):
+          initial = ((y-self.min_y)*scale, (x-self.min_x)*scale)
+          m = np.math.tan(angle)
+          x_f = 100*np.math.cos(angle) + x - self.min_x
+          y_f = 100*np.math.sin(angle) + y - self.min_y
           final = (y_f*scale, x_f*scale)
           self.viewer.draw_line(initial, final)
           angle = angle + .1675
           angle = np.where(np.greater(np.abs(angle), np.pi), np.sign(angle)*(np.abs(angle)-2*np.pi), angle)
 
+        self.viewer.draw_line(start, end, color=(0, 255, 255))
+
+        self.viewer.draw_circle((self.boat_radius+self.safety_radius)*scale, 30, False, color=(255, 0, 0)).add_attr(safety)
+        self.boat_trans.set_translation((y-self.min_y)*scale, (x-self.min_x)*scale)
+        self.boat_trans.set_rotation(-psi)
 
         return self.viewer.render(return_rgb_array = mode == 'rgb_array')
 
