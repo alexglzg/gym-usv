@@ -186,7 +186,7 @@ class UsvAsmcCaEnv(gym.Env):
         action0_last = action[0]
         action1_last = action[1]
 
-        beta = np.math.asin(upsilon[0]/(0.001 + np.sqrt(upsilon[0]*upsilon[0]+upsilon[1]*upsilon[1])))
+        beta = np.math.asin(upsilon[1]/(0.001 + np.sqrt(upsilon[0]*upsilon[0]+upsilon[1]*upsilon[1])))
         chi = psi + beta
         chi = np.where(np.greater(np.abs(chi), np.pi), (np.sign(chi))*(np.abs(chi)-2*np.pi), chi)
 
@@ -321,7 +321,7 @@ class UsvAsmcCaEnv(gym.Env):
         psi = eta[2]
         psi = np.where(np.greater(np.abs(psi), np.pi), (np.sign(psi))*(np.abs(psi)-2*np.pi), psi)
 
-        beta = np.math.asin(upsilon[0]/(0.001 + np.sqrt(upsilon[0]*upsilon[0]+upsilon[1]*upsilon[1])))
+        beta = np.math.asin(upsilon[1]/(0.001 + np.sqrt(upsilon[0]*upsilon[0]+upsilon[1]*upsilon[1])))
         chi = psi + beta
         chi = np.where(np.greater(np.abs(chi), np.pi), (np.sign(chi))*(np.abs(chi)-2*np.pi), chi)
         #Compute angle between USV and path
