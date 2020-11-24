@@ -342,7 +342,7 @@ class UsvAsmcCaEnv(gym.Env):
             distance[i] = np.sqrt(np.power((self.posx[i] - eta[0]),2) + np.power((self.posy[i]-eta[1]),2))
             distance[i] = distance[i] - self.radius[i] - self.boat_radius - self.safety_radius 
             if distance[i] < self.safety_distance:
-                collision == True
+                collision = True
 
          # Compute sensor readings
         obs_order = np.argsort(distance) # order obstacles in closest to furthest
@@ -407,7 +407,7 @@ class UsvAsmcCaEnv(gym.Env):
         xe_dot, ye_dot = self.body_to_path(upsilon[0], upsilon[1], psi_ak)
 
         #If ye is too large or USV went backwards too much, abort
-        if collision:
+        if collision==True:
             done = True
         else:
             done = False
@@ -479,7 +479,7 @@ class UsvAsmcCaEnv(gym.Env):
             distance[i] = np.sqrt(np.power((self.posx[i] - eta[0]),2) + np.power((self.posy[i]-eta[1]),2))
             distance[i] = distance[i] - self.radius[i] - self.boat_radius - self.safety_radius 
             if distance[i] < self.safety_distance:
-                collision == True
+                collision = True
 
         # Compute sensor readings
         obs_order = np.argsort(distance) # order obstacles in closest to furthest
