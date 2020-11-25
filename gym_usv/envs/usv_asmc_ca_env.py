@@ -73,11 +73,13 @@ class UsvAsmcCaEnv(gym.Env):
         self.radius = None #array
         
         # Sensor vector column 0 = senor angle column 1 = distance mesured
-        self.sensors = np.zeros((800, 2))
+        self.sensor_num = np.int(225)
+        self.sensors = np.zeros((self.sensor_num, 2))
         self.sensor_span = (2/3)*(2*np.pi)
-        self.lidar_resolution = 0.00524 #angle resolution in radians
-        self.sector_size = 32 # number of points per sector
+        self.lidar_resolution = self.sensor_span/self.sensor_num #angle resolution in radians
         self.sector_num = 25 # number of sectors
+        self.sector_size = np.int(self.sensor_num/self.sector_num) # number of points per sector
+        self.sensor_max_range = 100.0 #m
 
         # Boat radius
         self.boat_radius = 0.5
@@ -132,9 +134,9 @@ class UsvAsmcCaEnv(gym.Env):
         self.max_chi_ak = np.pi
         self.min_u_ref = 0.3
         self.max_u_ref = 1.4
-        self.min_sectors = np.zeros((25))
-        self.max_sectors = np.full((25), 100.)
-        self.sectors = np.zeros((25))
+        self.min_sectors = np.zeros((self.sector_num))
+        self.max_sectors = np.full((self.sector_num), self.sensor_max_range)
+        self.sectors = np.zeros((self.sector_num))
 
         #Min and max state vectors 
         self.low_state = np.hstack((self.min_u, self.min_v, self.min_r, self.min_ye, self.min_ye_dot, self.min_chi_ak, self.min_u_ref, self.min_sectors, self.min_action0, self.min_action1))
@@ -186,140 +188,140 @@ class UsvAsmcCaEnv(gym.Env):
         action0_last = action[0]
         action1_last = action[1]
 
-        beta = np.math.asin(upsilon[1]/(0.001 + np.sqrt(upsilon[0]*upsilon[0]+upsilon[1]*upsilon[1])))
-        chi = psi + beta
-        chi = np.where(np.greater(np.abs(chi), np.pi), (np.sign(chi))*(np.abs(chi)-2*np.pi), chi)
+        for i in range(5):
+            beta = np.math.asin(upsilon[1]/(0.001 + np.sqrt(upsilon[0]*upsilon[0]+upsilon[1]*upsilon[1])))
+            chi = psi + beta
+            chi = np.where(np.greater(np.abs(chi), np.pi), (np.sign(chi))*(np.abs(chi)-2*np.pi), chi)
 
-        #Compute the desired heading
-        #psi_d = chi + action[1]
-        psi_d = ak + action[1]
-        psi_d = np.where(np.greater(np.abs(psi_d), np.pi), (np.sign(psi_d))*(np.abs(psi_d)-2*np.pi), psi_d)
+            #Compute the desired heading
+            psi_d = chi + action[1]
+            #psi_d = ak + action[1]
+            psi_d = np.where(np.greater(np.abs(psi_d), np.pi), (np.sign(psi_d))*(np.abs(psi_d)-2*np.pi), psi_d)
 
-        #Second order filter to compute desired yaw rate
-        r_d = (psi_d - psi_d_last) / self.integral_step
-        psi_d_last = psi_d
-        o_dot_dot = (((r_d - o_last) * self.f1) - (self.f3 * o_dot_last)) * self.f2
-        o_dot = (self.integral_step)*(o_dot_dot + o_dot_dot_last)/2 + o_dot
-        o = (self.integral_step)*(o_dot + o_dot_last)/2 + o
-        r_d = o
-        o_last = o
-        o_dot_last = o_dot
-        o_dot_dot_last = o_dot_dot
+            #Second order filter to compute desired yaw rate
+            r_d = (psi_d - psi_d_last) / self.integral_step
+            psi_d_last = psi_d
+            o_dot_dot = (((r_d - o_last) * self.f1) - (self.f3 * o_dot_last)) * self.f2
+            o_dot = (self.integral_step)*(o_dot_dot + o_dot_dot_last)/2 + o_dot
+            o = (self.integral_step)*(o_dot + o_dot_last)/2 + o
+            r_d = o
+            o_last = o
+            o_dot_last = o_dot
+            o_dot_dot_last = o_dot_dot
 
-        #Compute variable hydrodynamic coefficients
-        Xu = -25
-        Xuu = 0
-        if(abs(upsilon[0]) > 1.2):
-            Xu = 64.55
-            Xuu = -70.92
+            #Compute variable hydrodynamic coefficients
+            Xu = -25
+            Xuu = 0
+            if(abs(upsilon[0]) > 1.2):
+                Xu = 64.55
+                Xuu = -70.92
 
-        Yv = 0.5*(-40*1000*abs(upsilon[1])) * \
-            (1.1+0.0045*(1.01/0.09) - 0.1*(0.27/0.09)+0.016*(np.power((0.27/0.09), 2)))
-        Yr = 6*(-3.141592*1000) * \
-            np.sqrt(np.power(upsilon[0], 2)+np.power(upsilon[1], 2))*0.09*0.09*1.01
-        Nv = 0.06*(-3.141592*1000) * \
-            np.sqrt(np.power(upsilon[0], 2)+np.power(upsilon[1], 2))*0.09*0.09*1.01
-        Nr = 0.02*(-3.141592*1000) * \
-            np.sqrt(np.power(upsilon[0], 2)+np.power(upsilon[1], 2))*0.09*0.09*1.01*1.01
+            Yv = 0.5*(-40*1000*abs(upsilon[1])) * \
+                (1.1+0.0045*(1.01/0.09) - 0.1*(0.27/0.09)+0.016*(np.power((0.27/0.09), 2)))
+            Yr = 6*(-3.141592*1000) * \
+                np.sqrt(np.power(upsilon[0], 2)+np.power(upsilon[1], 2))*0.09*0.09*1.01
+            Nv = 0.06*(-3.141592*1000) * \
+                np.sqrt(np.power(upsilon[0], 2)+np.power(upsilon[1], 2))*0.09*0.09*1.01
+            Nr = 0.02*(-3.141592*1000) * \
+                np.sqrt(np.power(upsilon[0], 2)+np.power(upsilon[1], 2))*0.09*0.09*1.01*1.01
 
-        #Rewrite USV model in simplified components f and g
-        g_u = 1 / (self.m - self.X_u_dot)
-        g_psi = 1 / (self.Iz - self.N_r_dot)
-        f_u = (((self.m - self.Y_v_dot)*upsilon[1]*upsilon[2] + (Xuu*np.abs(upsilon[0]) + Xu*upsilon[0])) / (self.m - self.X_u_dot))
-        f_psi = (((-self.X_u_dot + self.Y_v_dot)*upsilon[0]*upsilon[1] + (Nr * upsilon[2])) / (self.Iz - self.N_r_dot))
+            #Rewrite USV model in simplified components f and g
+            g_u = 1 / (self.m - self.X_u_dot)
+            g_psi = 1 / (self.Iz - self.N_r_dot)
+            f_u = (((self.m - self.Y_v_dot)*upsilon[1]*upsilon[2] + (Xuu*np.abs(upsilon[0]) + Xu*upsilon[0])) / (self.m - self.X_u_dot))
+            f_psi = (((-self.X_u_dot + self.Y_v_dot)*upsilon[0]*upsilon[1] + (Nr * upsilon[2])) / (self.Iz - self.N_r_dot))
 
-        #Compute heading error
-        e_psi = psi_d - eta[2]
-        e_psi = np.where(np.greater(np.abs(e_psi), np.pi), (np.sign(e_psi))*(np.abs(e_psi)-2*np.pi), e_psi)
-        e_psi_dot = r_d - upsilon[2]
-        #bs_e_psi = np.abs(e_psi)
+            #Compute heading error
+            e_psi = psi_d - eta[2]
+            e_psi = np.where(np.greater(np.abs(e_psi), np.pi), (np.sign(e_psi))*(np.abs(e_psi)-2*np.pi), e_psi)
+            e_psi_dot = r_d - upsilon[2]
 
-        #Compute desired speed (unnecessary if DNN gives it)
-        u_d = action[0]
+            #Compute desired speed (unnecessary if DNN gives it)
+            u_d = action[0]
 
-        #Compute speed error
-        e_u = u_d - upsilon[0]
-        e_u_int = self.integral_step*(e_u + e_u_last)/2 + e_u_int
+            #Compute speed error
+            e_u = u_d - upsilon[0]
+            e_u_int = self.integral_step*(e_u + e_u_last)/2 + e_u_int
 
-        #Create sliding surfaces for speed and heading
-        sigma_u = e_u + self.lambda_u * e_u_int
-        sigma_psi = e_psi_dot + self.lambda_psi * e_psi
+            #Create sliding surfaces for speed and heading
+            sigma_u = e_u + self.lambda_u * e_u_int
+            sigma_psi = e_psi_dot + self.lambda_psi * e_psi
 
-        #Compute ASMC gain derivatives
-        Ka_dot_u = np.where(np.greater(Ka_u, self.kmin_u), self.k_u * np.sign(np.abs(sigma_u) - self.mu_u), self.kmin_u)
-        Ka_dot_psi = np.where(np.greater(Ka_psi, self.kmin_psi), self.k_psi * np.sign(np.abs(sigma_psi) - self.mu_psi), self.kmin_psi)
+            #Compute ASMC gain derivatives
+            Ka_dot_u = np.where(np.greater(Ka_u, self.kmin_u), self.k_u * np.sign(np.abs(sigma_u) - self.mu_u), self.kmin_u)
+            Ka_dot_psi = np.where(np.greater(Ka_psi, self.kmin_psi), self.k_psi * np.sign(np.abs(sigma_psi) - self.mu_psi), self.kmin_psi)
 
-        #Compute gains
-        Ka_u = self.integral_step*(Ka_dot_u + Ka_dot_u_last)/2 + Ka_u
-        Ka_dot_u_last = Ka_dot_u
+            #Compute gains
+            Ka_u = self.integral_step*(Ka_dot_u + Ka_dot_u_last)/2 + Ka_u
+            Ka_dot_u_last = Ka_dot_u
 
-        Ka_psi = self.integral_step*(Ka_dot_psi + Ka_dot_psi_last)/2 + Ka_psi
-        Ka_dot_psi_last = Ka_dot_psi
+            Ka_psi = self.integral_step*(Ka_dot_psi + Ka_dot_psi_last)/2 + Ka_psi
+            Ka_dot_psi_last = Ka_dot_psi
 
-        #Compute ASMC for speed and heading
-        ua_u = (-Ka_u * np.power(np.abs(sigma_u), 0.5) * np.sign(sigma_u)) - (self.k2_u * sigma_u)
-        ua_psi = (-Ka_psi * np.power(np.abs(sigma_psi), 0.5) * np.sign(sigma_psi)) - (self.k2_psi * sigma_psi)
+            #Compute ASMC for speed and heading
+            ua_u = (-Ka_u * np.power(np.abs(sigma_u), 0.5) * np.sign(sigma_u)) - (self.k2_u * sigma_u)
+            ua_psi = (-Ka_psi * np.power(np.abs(sigma_psi), 0.5) * np.sign(sigma_psi)) - (self.k2_psi * sigma_psi)
 
-        #Compute control inputs for speed and heading
-        Tx = ((self.lambda_u * e_u) - f_u - ua_u) / g_u
-        Tz = ((self.lambda_psi * e_psi) - f_psi - ua_psi) / g_psi
+            #Compute control inputs for speed and heading
+            Tx = ((self.lambda_u * e_u) - f_u - ua_u) / g_u
+            Tz = ((self.lambda_psi * e_psi) - f_psi - ua_psi) / g_psi
 
-        #Compute both thrusters and saturate their values
-        Tport = (Tx / 2) + (Tz / self.B)
-        Tstbd = (Tx / (2*self.c)) - (Tz / (self.B*self.c))
+            #Compute both thrusters and saturate their values
+            Tport = (Tx / 2) + (Tz / self.B)
+            Tstbd = (Tx / (2*self.c)) - (Tz / (self.B*self.c))
 
-        Tport = np.where(np.greater(Tport, 36.5), 36.5, Tport)
-        Tport = np.where(np.less(Tport, -30), -30, Tport)
-        Tstbd = np.where(np.greater(Tstbd, 36.5), 36.5, Tstbd)
-        Tstbd = np.where(np.less(Tstbd, -30), -30, Tstbd)
+            Tport = np.where(np.greater(Tport, 36.5), 36.5, Tport)
+            Tport = np.where(np.less(Tport, -30), -30, Tport)
+            Tstbd = np.where(np.greater(Tstbd, 36.5), 36.5, Tstbd)
+            Tstbd = np.where(np.less(Tstbd, -30), -30, Tstbd)
 
-        #Compute USV model matrices
-        M = np.array([[self.m - self.X_u_dot, 0, 0],
-                      [0, self.m - self.Y_v_dot, 0 - self.Y_r_dot],
-                      [0, 0 - self.N_v_dot, self.Iz - self.N_r_dot]])
+            #Compute USV model matrices
+            M = np.array([[self.m - self.X_u_dot, 0, 0],
+                        [0, self.m - self.Y_v_dot, 0 - self.Y_r_dot],
+                        [0, 0 - self.N_v_dot, self.Iz - self.N_r_dot]])
 
-        T = np.array([Tport + self.c*Tstbd, 0, 0.5*self.B*(Tport - self.c*Tstbd)])
+            T = np.array([Tport + self.c*Tstbd, 0, 0.5*self.B*(Tport - self.c*Tstbd)])
 
-        CRB = np.array([[0, 0, 0 - self.m * upsilon[1]],
-                        [0, 0, self.m * upsilon[0]],
-                        [self.m * upsilon[1], 0 - self.m * upsilon[0], 0]])
-        
-        CA = np.array([[0, 0, 2 * ((self.Y_v_dot*upsilon[1]) + ((self.Y_r_dot + self.N_v_dot)/2) * upsilon[2])],
-                       [0, 0, 0 - self.X_u_dot * self.m * upsilon[0]],
-                       [2*(((0 - self.Y_v_dot) * upsilon[1]) - ((self.Y_r_dot+self.N_v_dot)/2) * upsilon[2]), self.X_u_dot * self.m * upsilon[0], 0]])
+            CRB = np.array([[0, 0, 0 - self.m * upsilon[1]],
+                            [0, 0, self.m * upsilon[0]],
+                            [self.m * upsilon[1], 0 - self.m * upsilon[0], 0]])
+            
+            CA = np.array([[0, 0, 2 * ((self.Y_v_dot*upsilon[1]) + ((self.Y_r_dot + self.N_v_dot)/2) * upsilon[2])],
+                        [0, 0, 0 - self.X_u_dot * self.m * upsilon[0]],
+                        [2*(((0 - self.Y_v_dot) * upsilon[1]) - ((self.Y_r_dot+self.N_v_dot)/2) * upsilon[2]), self.X_u_dot * self.m * upsilon[0], 0]])
 
-        C = CRB + CA
+            C = CRB + CA
 
-        Dl = np.array([[0 - Xu, 0, 0],
-                       [0, 0 - Yv, 0 - Yr],
-                       [0, 0 - Nv, 0 - Nr]])
+            Dl = np.array([[0 - Xu, 0, 0],
+                        [0, 0 - Yv, 0 - Yr],
+                        [0, 0 - Nv, 0 - Nr]])
 
-        Dn = np.array([[Xuu * abs(upsilon[0]), 0, 0],
-                       [0, self.Yvv * abs(upsilon[1]) + self.Yvr * abs(upsilon[2]), self.Yrv *
-                        abs(upsilon[1]) + self.Yrr * abs(upsilon[2])],
-                       [0, self.Nvv * abs(upsilon[1]) + self.Nvr * abs(upsilon[2]), self.Nrv * abs(upsilon[1]) + self.Nrr * abs(upsilon[2])]])
+            Dn = np.array([[Xuu * abs(upsilon[0]), 0, 0],
+                        [0, self.Yvv * abs(upsilon[1]) + self.Yvr * abs(upsilon[2]), self.Yrv *
+                            abs(upsilon[1]) + self.Yrr * abs(upsilon[2])],
+                        [0, self.Nvv * abs(upsilon[1]) + self.Nvr * abs(upsilon[2]), self.Nrv * abs(upsilon[1]) + self.Nrr * abs(upsilon[2])]])
 
-        D = Dl - Dn
+            D = Dl - Dn
 
-        #Compute acceleration and velocity in body
-        upsilon_dot = np.matmul(np.linalg.inv(
-            M), (T - np.matmul(C, upsilon) - np.matmul(D, upsilon)))
-        upsilon = (self.integral_step) * (upsilon_dot +
-                                               upsilon_dot_last)/2 + upsilon  # integral
-        upsilon_dot_last = upsilon_dot
+            #Compute acceleration and velocity in body
+            upsilon_dot = np.matmul(np.linalg.inv(
+                M), (T - np.matmul(C, upsilon) - np.matmul(D, upsilon)))
+            upsilon = (self.integral_step) * (upsilon_dot +
+                                                upsilon_dot_last)/2 + upsilon  # integral
+            upsilon_dot_last = upsilon_dot
 
-        #Rotation matrix
-        J = np.array([[np.cos(eta[2]), -np.sin(eta[2]), 0],
-                      [np.sin(eta[2]), np.cos(eta[2]), 0],
-                      [0, 0, 1]])
+            #Rotation matrix
+            J = np.array([[np.cos(eta[2]), -np.sin(eta[2]), 0],
+                        [np.sin(eta[2]), np.cos(eta[2]), 0],
+                        [0, 0, 1]])
 
-        #Compute NED position
-        eta_dot = np.matmul(J, upsilon)  # transformation into local reference frame
-        eta = (self.integral_step)*(eta_dot+eta_dot_last)/2 + eta  # integral
-        eta_dot_last = eta_dot
+            #Compute NED position
+            eta_dot = np.matmul(J, upsilon)  # transformation into local reference frame
+            eta = (self.integral_step)*(eta_dot+eta_dot_last)/2 + eta  # integral
+            eta_dot_last = eta_dot
 
-        psi = eta[2]
-        psi = np.where(np.greater(np.abs(psi), np.pi), (np.sign(psi))*(np.abs(psi)-2*np.pi), psi)
+            psi = eta[2]
+            psi = np.where(np.greater(np.abs(psi), np.pi), (np.sign(psi))*(np.abs(psi)-2*np.pi), psi)
 
         beta = np.math.asin(upsilon[1]/(0.001 + np.sqrt(upsilon[0]*upsilon[0]+upsilon[1]*upsilon[1])))
         chi = psi + beta
@@ -348,7 +350,7 @@ class UsvAsmcCaEnv(gym.Env):
         obs_order = np.argsort(distance) # order obstacles in closest to furthest
         for i in range(len(self.sensors)):
             self.sensors[i][0]= -np.pi*2/3 + i*self.lidar_resolution
-            self.sensors[i][1] = 100
+            self.sensors[i][1] = self.sensor_max_range
             sensor_angle = psi + self.sensors[i][0]
             sensor_angle = np.where(np.greater(np.abs(sensor_angle), np.pi), np.sign(sensor_angle)*(np.abs(sensor_angle)-2*np.pi), sensor_angle)
             #m = np.math.tan(self.sensors[i][0]
@@ -371,7 +373,7 @@ class UsvAsmcCaEnv(gym.Env):
                           self.sensors[i][1] = distance1
                         break
                 else:
-                    self.sensors[i][1] = 100
+                    self.sensors[i][1] = self.sensor_max_range
 
         # Feasability pooling: compute sectors
         sectors = self.max_sectors
@@ -398,7 +400,7 @@ class UsvAsmcCaEnv(gym.Env):
                 if opening_found == False:
                     sectors[i] = x[x_index]
         self.sectors = sectors
-        sectors = (1-sectors/100)            
+        sectors = (1-sectors/self.sensor_max_range)            
 
         #Compute reward 
         reward = self.compute_reward(ye_abs, chi_ak, action_dot0, action_dot1, collision, u_ref, u, v)
@@ -406,7 +408,7 @@ class UsvAsmcCaEnv(gym.Env):
         #Compute velocities relative to path (for ye derivative as ye_dot = v_ak)
         xe_dot, ye_dot = self.body_to_path(upsilon[0], upsilon[1], psi_ak)
 
-        #If ye is too large or USV went backwards too much, abort
+        #If USV collides, abort
         if collision==True:
             done = True
         else:
@@ -434,7 +436,7 @@ class UsvAsmcCaEnv(gym.Env):
         eta_dot_last = np.array([0.,0.,0.])
         upsilon_dot_last = np.array([0.,0.,0.])
         action0_last = 0.0
-        action1_last = psi
+        action1_last = 0.0
         e_u_int = 0.
         Ka_u = 0.
         Ka_psi = 0.
@@ -485,7 +487,7 @@ class UsvAsmcCaEnv(gym.Env):
         obs_order = np.argsort(distance) # order obstacles in closest to furthest
         for i in range(len(self.sensors)):
             self.sensors[i][0]= -np.pi*2/3 + i*self.lidar_resolution
-            self.sensors[i][1] = 100
+            self.sensors[i][1] = self.sensor_max_range
             sensor_angle = psi + self.sensors[i][0]
             sensor_angle = np.where(np.greater(np.abs(sensor_angle), np.pi), np.sign(sensor_angle)*(np.abs(sensor_angle)-2*np.pi), sensor_angle)
             for j in range(self.num_obs):
@@ -507,7 +509,7 @@ class UsvAsmcCaEnv(gym.Env):
                           self.sensors[i][1] = distance1
                         break
                 else:
-                    self.sensors[i][1] = 100
+                    self.sensors[i][1] = self.sensor_max_range
 
         # Feasability pooling: compute sectors
         sectors = self.max_sectors
@@ -535,7 +537,7 @@ class UsvAsmcCaEnv(gym.Env):
                     sectors[i] = x[x_index]
 
         self.sectors = sectors
-        sectors = (1-sectors/100)
+        sectors = (1-sectors/self.sensor_max_range)
 
         self.state = np.hstack((upsilon[0], upsilon[1], upsilon[2], ye, ye_dot, psi_ak, u_ref, sectors, action0_last, action1_last))
         self.position = np.array([eta[0], eta[1], psi])
@@ -597,21 +599,21 @@ class UsvAsmcCaEnv(gym.Env):
           y_f = self.sensors[i][1]*np.math.sin(angle) + y - self.min_y
           final = (y_f*scale, x_f*scale)
           section = np.int(np.floor(i/self.sector_size))
-          if self.sectors[section] < 100:
+          if self.sectors[section] < self.sensor_max_range:
               self.viewer.draw_line(initial, final, color=(255, 0, 0))
           else:
               self.viewer.draw_line(initial, final, color=(0, 255, 0))
           
-        angle = -(2/3)*np.pi + psi #+ 0.08377
+        angle = -(2/3)*np.pi + psi 
         angle = np.where(np.greater(np.abs(angle), np.pi), np.sign(angle)*(np.abs(angle)-2*np.pi), angle)
         for i in range(self.sector_num+1):
           initial = ((y-self.min_y)*scale, (x-self.min_x)*scale)
           m = np.math.tan(angle)
-          x_f = 100*np.math.cos(angle) + x - self.min_x
-          y_f = 100*np.math.sin(angle) + y - self.min_y
+          x_f = self.sensor_max_range*np.math.cos(angle) + x - self.min_x
+          y_f = self.sensor_max_range*np.math.sin(angle) + y - self.min_y
           final = (y_f*scale, x_f*scale)
           self.viewer.draw_line(initial, final)
-          angle = angle + .1675
+          angle = angle + self.sensor_span/self.sector_num
           angle = np.where(np.greater(np.abs(angle), np.pi), np.sign(angle)*(np.abs(angle)-2*np.pi), angle)
 
         self.viewer.draw_line(start, end, color=(0, 255, 255))
