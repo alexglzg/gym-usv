@@ -97,7 +97,7 @@ class UsvAsmcCaEnv(gym.Env):
 
         #Min and max actions 
         # velocity 
-        self.min_action0 = 0
+        self.min_action0 = 0.0
         self.max_action0 = 1.4
         # angle (change to -pi and pi if necessary)
         self.min_action1 = -np.pi/2
@@ -109,8 +109,8 @@ class UsvAsmcCaEnv(gym.Env):
         self.w_chi = 0.4
         self.k_ye = 0.5
         self.k_uu = 15.0
-        self.gamma_theta = 1.0 
-        self.gamma_x = 1.0
+        self.gamma_theta = 1.0 #4.0
+        self.gamma_x = 1.0 #0.005
         self.epsilon = 1.0
         self.sigma_ye = 1.
         self.lambda_reward = 0.9
@@ -459,7 +459,7 @@ class UsvAsmcCaEnv(gym.Env):
         # Desired speed
         u_ref = np.random.uniform(low=self.min_u_ref, high=self.max_u_ref)
         # number of obstacles 
-        self.num_obs = np.random.random_integers(low=20, high=40)
+        self.num_obs = np.random.random_integers(low=0, high=20)
         # array of positions in x and y and radius
         self.posx = np.random.normal(15,10,size=(self.num_obs,1))
         self.posy = np.random.uniform(low=-10, high=10, size=(self.num_obs,1))
@@ -651,14 +651,14 @@ class UsvAsmcCaEnv(gym.Env):
             numerator = 0.0
             denominator = 0.0
             for i in range(len(self.sensors)):
-                numerator = numerator + (1./(1.+self.gamma_theta*self.sensors[i][1]))*(1./(self.gamma_x*np.max([self.sensors[i][0], self.epsilon])))
-                denominator = denominator + 1/(1+np.abs(self.gamma_theta*self.sensors[i][1]))
+                numerator = numerator + (1./(1+np.abs(self.gamma_theta*self.sensors[i][1])))*(1./(self.gamma_x*np.power(np.max([self.sensors[i][0], self.epsilon]),2)))
+                denominator = denominator + 1./(1+np.abs(self.gamma_theta*self.sensors[i][1]))
             reward_oa = -numerator/denominator
             # Total non-collision reward
             reward = self.lambda_reward*reward_pf + (1-self.lambda_reward)*reward_oa
         else:
             # Collision Reward
-            reward = -1
+            reward = -1000
         return reward
 
     def body_to_path(self, x2, y2, alpha):
