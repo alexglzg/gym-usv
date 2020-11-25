@@ -188,7 +188,7 @@ class UsvAsmcCaEnv(gym.Env):
         action0_last = action[0]
         action1_last = action[1]
 
-        for i in range(5):
+        for i in range(10):
             beta = np.math.asin(upsilon[1]/(0.001 + np.sqrt(upsilon[0]*upsilon[0]+upsilon[1]*upsilon[1])))
             chi = psi + beta
             chi = np.where(np.greater(np.abs(chi), np.pi), (np.sign(chi))*(np.abs(chi)-2*np.pi), chi)
