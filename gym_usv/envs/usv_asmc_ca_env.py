@@ -376,7 +376,8 @@ class UsvAsmcCaEnv(gym.Env):
                     self.sensors[i][1] = self.sensor_max_range
 
         # Feasability pooling: compute sectors
-        sectors = self.max_sectors
+        #sectors = self.max_sectors
+        sectors = np.full((self.sector_num), self.sensor_max_range)
         for i in range(self.sector_num): # loop through sectors
             x = self.sensors[i*self.sector_size:(i+1)*self.sector_size,1]
             x_ordered = np.argsort(x)
@@ -512,7 +513,8 @@ class UsvAsmcCaEnv(gym.Env):
                     self.sensors[i][1] = self.sensor_max_range
 
         # Feasability pooling: compute sectors
-        sectors = self.max_sectors
+        #sectors = self.max_sectors
+        sectors = np.full((self.sector_num), self.sensor_max_range)
         for i in range(self.sector_num): # loop through sectors
             x = self.sensors[i*self.sector_size:(i+1)*self.sector_size,1]
             x_ordered = np.argsort(x)
