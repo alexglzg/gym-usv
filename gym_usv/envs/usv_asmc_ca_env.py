@@ -87,8 +87,8 @@ class UsvAsmcCaEnv(gym.Env):
         self.safety_distance = 0.1
 
         #Map limits in meters
-        self.max_y = 10
-        self.min_y = -10
+        self.max_y = 15
+        self.min_y = -15
         self.max_x = 30
         self.min_x = -10
 
@@ -100,24 +100,25 @@ class UsvAsmcCaEnv(gym.Env):
         self.min_action0 = 0.0
         self.max_action0 = 1.4
         # angle (change to -pi and pi if necessary)
-        self.min_action1 = -np.pi/2
-        self.max_action1 = np.pi/2
+        self.min_action1 = -np.pi
+        self.max_action1 = np.pi
 
         #Reward associated functions anf gains
-        self.w_y = 0.4
-        self.w_u = 0.2
-        self.w_chi = 0.4
+        self.w_y = 0.7
+        self.w_u = 0.3
+        self.w_chi = 0.6
+        self.k_chi = 5.72
         self.k_ye = 0.5
         self.k_uu = 15.0
-        self.gamma_theta = 1.0 #4.0
-        self.gamma_x = 1.0 #0.005
+        self.gamma_theta = 4.0
+        self.gamma_x = 0.5
         self.epsilon = 1.0
         self.sigma_ye = 1.
-        self.lambda_reward = 0.9
+        self.lambda_reward = 0.5
         self.w_action0 = 0.2
         self.w_action1 = 0.2
         self.c_action0 = 1. / np.power((self.max_action0/2-self.min_action0/2)/self.integral_step, 2)
-        self.c_action1 = 1. / np.power((self.max_action1/2-self.min_action1/2)/self.integral_step, 2)
+        self.c_action1 = 1. / np.power((self.max_action1/4-self.min_action1/4)/self.integral_step, 2)
 
         #Min and max values of the state
         self.min_u = -1.5
@@ -126,8 +127,8 @@ class UsvAsmcCaEnv(gym.Env):
         self.max_v = 1.0
         self.min_r = -1.
         self.max_r = 1.
-        self.min_ye = -10.
-        self.max_ye = 10.
+        self.min_ye = -20.
+        self.max_ye = 20.
         self.min_ye_dot = -1.5
         self.max_ye_dot = 1.5
         self.min_chi_ak = -np.pi
@@ -135,7 +136,7 @@ class UsvAsmcCaEnv(gym.Env):
         self.min_u_ref = 0.3
         self.max_u_ref = 1.4
         self.min_sectors = np.zeros((self.sector_num))
-        self.max_sectors = np.full((self.sector_num), self.sensor_max_range)
+        self.max_sectors = np.ones((self.sector_num))
         self.sectors = np.zeros((self.sector_num))
 
         #Min and max state vectors 
@@ -183,8 +184,10 @@ class UsvAsmcCaEnv(gym.Env):
         upsilon_dot_last = np.array([u_dot_last, v_dot_last, r_dot_last])
 
         #Calculate action derivative for reward
+        action1_dif = action[1] - action1_last
+        action1_dif = np.where(np.greater(np.abs(action1_dif), np.pi), (np.sign(action1_dif))*(np.abs(action1_dif)-2*np.pi), action1_dif)
         action_dot0 = (action[0] - action0_last)/self.integral_step
-        action_dot1 = (action[1] - action1_last)/self.integral_step
+        action_dot1 = (action1_dif)/self.integral_step
         action0_last = action[0]
         action1_last = action[1]
 
@@ -194,8 +197,8 @@ class UsvAsmcCaEnv(gym.Env):
             chi = np.where(np.greater(np.abs(chi), np.pi), (np.sign(chi))*(np.abs(chi)-2*np.pi), chi)
 
             #Compute the desired heading
-            psi_d = chi + action[1]
-            #psi_d = ak + action[1]
+            #psi_d = chi + action[1]
+            psi_d = ak + action[1]
             psi_d = np.where(np.greater(np.abs(psi_d), np.pi), (np.sign(psi_d))*(np.abs(psi_d)-2*np.pi), psi_d)
 
             #Second order filter to compute desired yaw rate
@@ -204,7 +207,7 @@ class UsvAsmcCaEnv(gym.Env):
             o_dot_dot = (((r_d - o_last) * self.f1) - (self.f3 * o_dot_last)) * self.f2
             o_dot = (self.integral_step)*(o_dot_dot + o_dot_dot_last)/2 + o_dot
             o = (self.integral_step)*(o_dot + o_dot_last)/2 + o
-            r_d = o
+            r_d = 0.0#o
             o_last = o
             o_dot_last = o_dot
             o_dot_dot_last = o_dot_dot
@@ -412,6 +415,9 @@ class UsvAsmcCaEnv(gym.Env):
         #If USV collides, abort
         if collision==True:
             done = True
+        elif ye_abs > self.max_ye or eta[0] < self.min_x:
+            done = True
+            reward = -1
         else:
             done = False
 
@@ -439,8 +445,8 @@ class UsvAsmcCaEnv(gym.Env):
         action0_last = 0.0
         action1_last = 0.0
         e_u_int = 0.
-        Ka_u = 0.
-        Ka_psi = 0.
+        Ka_u = self.kmin_u
+        Ka_psi = self.kmin_psi
         e_u_last = 0.
         Ka_dot_u_last = 0.
         Ka_dot_psi_last = 0.
@@ -459,7 +465,7 @@ class UsvAsmcCaEnv(gym.Env):
         # Desired speed
         u_ref = np.random.uniform(low=self.min_u_ref, high=self.max_u_ref)
         # number of obstacles 
-        self.num_obs = np.random.random_integers(low=0, high=20)
+        self.num_obs = 0#np.random.random_integers(low=0, high=20)
         # array of positions in x and y and radius
         self.posx = np.random.normal(15,10,size=(self.num_obs,1))
         self.posy = np.random.uniform(low=-10, high=10, size=(self.num_obs,1))
@@ -554,7 +560,7 @@ class UsvAsmcCaEnv(gym.Env):
 
     def render(self, mode='human'):
 
-        screen_width = 400
+        screen_width = 600
         screen_height = 800
 
         world_width = self.max_y - self.min_y
@@ -634,13 +640,13 @@ class UsvAsmcCaEnv(gym.Env):
 
     def compute_reward(self, ye, chi_ak, action_dot0, action_dot1, collision, u_ref, u, v):
         if (collision == False):
-            chi_ak = np.abs(chi_ak)
             # Cross tracking reward
             reward_ye = np.where(np.greater(ye, self.sigma_ye), np.exp(-self.k_ye*ye), np.exp(-self.k_ye*np.power(ye, 2)/self.sigma_ye))
             # Velocity reward
-            reward_u = np.exp(-self.k_uu*np.abs(u_ref-np.sqrt(u*u+v*v)))
+            reward_u = np.exp(-self.k_uu*np.power(u_ref-np.sqrt(u*u+v*v),2))
             # Angle reward
-            reward_chi = np.cos(chi_ak)
+            #reward_chi = np.cos(chi_ak)
+            reward_chi = -np.exp(self.k_chi*(np.abs(chi_ak) - np.pi))
             # Action velocity gradual change reward
             reward_a0 = np.math.tanh(-self.c_action0*np.power(action_dot0, 2))
             # Action angle gradual change reward
@@ -651,11 +657,11 @@ class UsvAsmcCaEnv(gym.Env):
             numerator = 0.0
             denominator = 0.0
             for i in range(len(self.sensors)):
-                numerator = numerator + (1./(1+np.abs(self.gamma_theta*self.sensors[i][1])))*(1./(self.gamma_x*np.power(np.max([self.sensors[i][0], self.epsilon]),2)))
-                denominator = denominator + 1./(1+np.abs(self.gamma_theta*self.sensors[i][1]))
+                numerator = numerator + (1./(1+np.abs(self.gamma_theta*self.sensors[i][0])))*(1./(self.gamma_x*np.power(np.max([self.sensors[i][1], self.epsilon]),2)))
+                denominator = denominator + 1./(1+np.abs(self.gamma_theta*self.sensors[i][0]))
             reward_oa = -numerator/denominator
             # Total non-collision reward
-            reward = self.lambda_reward*reward_pf + (1-self.lambda_reward)*reward_oa
+            reward = reward_pf + (1-self.lambda_reward)*reward_oa
         else:
             # Collision Reward
             reward = -1000
