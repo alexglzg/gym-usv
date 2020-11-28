@@ -106,7 +106,7 @@ class UsvAsmcCaEnv(gym.Env):
         #Reward associated functions anf gains
         self.w_y = 0.7
         self.w_u = 0.3
-        self.w_chi = 0.6
+        self.w_chi = 1.0
         self.k_chi = 5.72
         self.k_ye = 0.5
         self.k_uu = 15.0
@@ -188,18 +188,16 @@ class UsvAsmcCaEnv(gym.Env):
         chi = psi + beta
         chi = np.where(np.greater(np.abs(chi), np.pi), (np.sign(chi))*(np.abs(chi)-2*np.pi), chi)
 
-        #Compute the desired heading
-        psi_d = chi + action[1]
-        action1_dif = psi_d - action1_last
-
         #Calculate action derivative for reward
-        #action1_dif = action[1] - action1_last
+        #psi_d = chi + action[1]
+        #action1_dif = psi_d - action1_last
+        action1_dif = action[1] - action1_last
         action1_dif = np.where(np.greater(np.abs(action1_dif), np.pi), (np.sign(action1_dif))*(np.abs(action1_dif)-2*np.pi), action1_dif)
         action_dot0 = (action[0] - action0_last)/self.integral_step
         action_dot1 = (action1_dif)/self.integral_step
         action0_last = action[0]
-        #action1_last = action[1]
-        action1_last = psi_d
+        action1_last = action[1]
+        #action1_last = psi_d
 
         for i in range(10):
             beta = np.math.asin(upsilon[1]/(0.001 + np.sqrt(upsilon[0]*upsilon[0]+upsilon[1]*upsilon[1])))
@@ -207,8 +205,8 @@ class UsvAsmcCaEnv(gym.Env):
             chi = np.where(np.greater(np.abs(chi), np.pi), (np.sign(chi))*(np.abs(chi)-2*np.pi), chi)
 
             #Compute the desired heading
-            psi_d = chi + action[1]
-            #psi_d = ak + action[1]
+            #psi_d = chi + action[1]
+            psi_d = ak + action[1]
             psi_d = np.where(np.greater(np.abs(psi_d), np.pi), (np.sign(psi_d))*(np.abs(psi_d)-2*np.pi), psi_d)
 
             #Second order filter to compute desired yaw rate
