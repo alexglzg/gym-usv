@@ -87,8 +87,8 @@ class UsvAsmcCaEnv(gym.Env):
         self.safety_distance = 0.1
 
         #Map limits in meters
-        self.max_y = 10
-        self.min_y = -10
+        self.max_y = 15
+        self.min_y = -15
         self.max_x = 30
         self.min_x = -10
 
@@ -127,8 +127,8 @@ class UsvAsmcCaEnv(gym.Env):
         self.max_v = 1.0
         self.min_r = -1.
         self.max_r = 1.
-        self.min_ye = -10.
-        self.max_ye = 10.
+        self.min_ye = -20.
+        self.max_ye = 20.
         self.min_ye_dot = -1.5
         self.max_ye_dot = 1.5
         self.min_chi_ak = -np.pi
@@ -184,8 +184,10 @@ class UsvAsmcCaEnv(gym.Env):
         upsilon_dot_last = np.array([u_dot_last, v_dot_last, r_dot_last])
 
         #Calculate action derivative for reward
+        action1_dif = action[1] - action1_last
+        action1_dif = np.where(np.greater(np.abs(action1_dif), np.pi), (np.sign(action1_dif))*(np.abs(action1_dif)-2*np.pi), action1_dif)
         action_dot0 = (action[0] - action0_last)/self.integral_step
-        action_dot1 = (action[1] - action1_last)/self.integral_step
+        action_dot1 = (action1_dif)/self.integral_step
         action0_last = action[0]
         action1_last = action[1]
 
@@ -205,7 +207,7 @@ class UsvAsmcCaEnv(gym.Env):
             o_dot_dot = (((r_d - o_last) * self.f1) - (self.f3 * o_dot_last)) * self.f2
             o_dot = (self.integral_step)*(o_dot_dot + o_dot_dot_last)/2 + o_dot
             o = (self.integral_step)*(o_dot + o_dot_last)/2 + o
-            r_d = o
+            r_d = 0.0#o
             o_last = o
             o_dot_last = o_dot
             o_dot_dot_last = o_dot_dot
@@ -348,7 +350,7 @@ class UsvAsmcCaEnv(gym.Env):
                 collision = True
 
          # Compute sensor readings
-        obs_order = np.argsort(distance) # order obstacles in closest to furthest
+        obs_order = np.argsort(distance) # order obstacles in closest to farthest
         for i in range(len(self.sensors)):
             self.sensors[i][0]= -np.pi*2/3 + i*self.lidar_resolution
             self.sensors[i][1] = self.sensor_max_range
@@ -413,6 +415,9 @@ class UsvAsmcCaEnv(gym.Env):
         #If USV collides, abort
         if collision==True:
             done = True
+        elif ye_abs > self.max_ye or eta[0] < self.min_x:
+            done = True
+            reward = -1
         else:
             done = False
 
@@ -440,8 +445,8 @@ class UsvAsmcCaEnv(gym.Env):
         action0_last = 0.0
         action1_last = 0.0
         e_u_int = 0.
-        Ka_u = 0.
-        Ka_psi = 0.
+        Ka_u = self.kmin_u
+        Ka_psi = self.kmin_psi
         e_u_last = 0.
         Ka_dot_u_last = 0.
         Ka_dot_psi_last = 0.
@@ -555,7 +560,7 @@ class UsvAsmcCaEnv(gym.Env):
 
     def render(self, mode='human'):
 
-        screen_width = 400
+        screen_width = 600
         screen_height = 800
 
         world_width = self.max_y - self.min_y
