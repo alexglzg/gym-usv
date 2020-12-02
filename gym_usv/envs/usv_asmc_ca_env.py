@@ -89,7 +89,7 @@ class UsvAsmcCaEnv(gym.Env):
         #Map limits in meters
         self.max_y = 15
         self.min_y = -15
-        self.max_x = 30
+        self.max_x = 40
         self.min_x = -10
 
         #Variable for the visualizer
@@ -111,7 +111,7 @@ class UsvAsmcCaEnv(gym.Env):
         self.k_ye = 0.5
         self.k_uu = 15.0
         self.gamma_theta = 4.0
-        self.gamma_x = 0.5
+        self.gamma_x = 0.05
         self.epsilon = 1.0
         self.sigma_ye = 1.
         self.lambda_reward = 0.5
@@ -473,7 +473,7 @@ class UsvAsmcCaEnv(gym.Env):
         # Desired speed
         u_ref = np.random.uniform(low=self.min_u_ref, high=self.max_u_ref)
         # number of obstacles 
-        self.num_obs = 0#np.random.random_integers(low=0, high=20)
+        self.num_obs = np.random.random_integers(low=0, high=2)
         # array of positions in x and y and radius
         self.posx = np.random.normal(15,10,size=(self.num_obs,1))
         self.posy = np.random.uniform(low=-10, high=10, size=(self.num_obs,1))
@@ -569,7 +569,7 @@ class UsvAsmcCaEnv(gym.Env):
     def render(self, mode='human'):
 
         screen_width = 600
-        screen_height = 800
+        screen_height = 1000
 
         world_width = self.max_y - self.min_y
         scale = screen_width/world_width
