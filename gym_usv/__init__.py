@@ -19,3 +19,8 @@ register(
     id='usv-asmc-ca-v0',
     entry_point='gym_usv.envs:UsvAsmcCaEnv'
 )
+
+register(
+    id='usv-kinematics-ca-v0',
+    entry_point='gym_usv.envs:UsvKinematicsCaEnv'
+)

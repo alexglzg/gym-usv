@@ -1,9 +1,8 @@
 """
-@author: Alejandro Gonzalez, Ivana Collado, Sebastian
-        Perez
+@author: Alejandro Gonzalez, Ivana Collado
 
-Environment of an Unmanned Surface Vehicle with an
-Adaptive Sliding Mode Controller to train collision
+Environment of an Unmanned Surface Vehicle with 
+immediate kinematic control to train collision
 avoidance on the OpenAI Gym library.
 """
 
@@ -13,7 +12,7 @@ from gym.utils import seeding
 from gym.envs.classic_control import rendering
 import numpy as np
 
-class UsvAsmcCaEnv(gym.Env):
+class UsvKinematicsCaEnv(gym.Env):
     metadata = {'render.modes': ['human']}
 
     def __init__(self):
@@ -181,6 +180,9 @@ class UsvAsmcCaEnv(gym.Env):
         target = self.target
         so_filter = self.so_filter
 
+        action0 = (action[0] + 1)*1.4/2
+        action1 = action[1]*np.pi/2
+
         #Change from vectors to scalars
         u, v, r, ye, ye_dot, chi_ak, u_ref, sectors, action0_last, action1_last = state[0], state[1], state[2], state[3], state[4], state[5], state[6], state[7:32], state[32], state[33]
         x, y, psi = position
@@ -195,26 +197,22 @@ class UsvAsmcCaEnv(gym.Env):
         eta_dot_last = np.array([x_dot_last, y_dot_last, psi_dot_last])
         upsilon_dot_last = np.array([u_dot_last, v_dot_last, r_dot_last])
 
-
         beta = np.math.asin(upsilon[1]/(0.001 + np.sqrt(upsilon[0]*upsilon[0]+upsilon[1]*upsilon[1])))
         chi = psi + beta
         chi = np.where(np.greater(np.abs(chi), np.pi), (np.sign(chi))*(np.abs(chi)-2*np.pi), chi)
 
-        action[0] = (action[0] + 1)*1.4/2
-        action[1] = action[1]*np.pi/2
-
         #Calculate action derivative for reward
-        psi_d = chi + action[1]
+        psi_d = chi + action1
         action1_dif = psi_d - action1_last
-        #action1_dif = action[1] - action1_last
+        #action1_dif = action1 - action1_last
         action1_dif = np.where(np.greater(np.abs(action1_dif), np.pi), (np.sign(action1_dif))*(np.abs(action1_dif)-2*np.pi), action1_dif)
-        action_dot0 = (action[0] - action0_last)/self.integral_step
+        action_dot0 = (action0 - action0_last)/self.integral_step
         action_dot1 = (action1_dif)/self.integral_step
-        action0_last = action[0]
-        #action1_last = action[1]
+        action0_last = action0
+        #action1_last = action1
         action1_last = psi_d
 
-        for i in range(10):
+        '''for i in range(10):
             beta = np.math.asin(upsilon[1]/(0.001 + np.sqrt(upsilon[0]*upsilon[0]+upsilon[1]*upsilon[1])))
             chi = psi + beta
             chi = np.where(np.greater(np.abs(chi), np.pi), (np.sign(chi))*(np.abs(chi)-2*np.pi), chi)
@@ -347,6 +345,21 @@ class UsvAsmcCaEnv(gym.Env):
             eta_dot_last = eta_dot
 
             psi = eta[2]
+            psi = np.where(np.greater(np.abs(psi), np.pi), (np.sign(psi))*(np.abs(psi)-2*np.pi), psi)'''
+        
+        for i in range(10):
+            upsilon = np.array([action0, (psi_d-psi)/2, 0])
+            #eta[2] = psi_d
+            #Rotation matrix
+            J = np.array([[np.cos(eta[2]), -np.sin(eta[2]), 0],
+                        [np.sin(eta[2]), np.cos(eta[2]), 0],
+                        [0, 0, 1]])
+
+            eta_dot = np.matmul(J, upsilon)  # transformation into local reference frame
+            eta = (self.integral_step)*(eta_dot+eta_dot_last)/2 + eta  # integral
+            eta_dot_last = eta_dot
+
+            psi = eta[2]
             psi = np.where(np.greater(np.abs(psi), np.pi), (np.sign(psi))*(np.abs(psi)-2*np.pi), psi)
 
         beta = np.math.asin(upsilon[1]/(0.001 + np.sqrt(upsilon[0]*upsilon[0]+upsilon[1]*upsilon[1])))
@@ -357,7 +370,6 @@ class UsvAsmcCaEnv(gym.Env):
         chi_ak = np.where(np.greater(np.abs(chi_ak), np.pi), (np.sign(chi_ak))*(np.abs(chi_ak)-2*np.pi), chi_ak)
         psi_ak = psi - ak
         psi_ak = np.where(np.greater(np.abs(psi_ak), np.pi), (np.sign(psi_ak))*(np.abs(psi_ak)-2*np.pi), psi_ak)
-
 
         #Compute cross-track error
         ye = -(eta[0] - x_0)*np.math.sin(ak) + (eta[1] - y_0)*np.math.cos(ak)
@@ -487,7 +499,7 @@ class UsvAsmcCaEnv(gym.Env):
         # Desired speed
         u_ref = np.random.uniform(low=self.min_u_ref, high=self.max_u_ref)
         # number of obstacles 
-        self.num_obs = np.random.random_integers(low=0, high=2)
+        self.num_obs = np.random.random_integers(low=0, high=20)
         # array of positions in x and y and radius
         self.posx = np.random.normal(15,10,size=(self.num_obs,1))
         self.posy = np.random.uniform(low=-10, high=10, size=(self.num_obs,1))
